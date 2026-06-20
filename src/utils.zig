@@ -15,23 +15,6 @@ const Block = blocks.Block;
 
 const log = std.log.scoped(.utils);
 
-// TODO
-pub const TextStyle = struct {
-    bold: bool = false,
-    italic: bool = false,
-    underline: bool = false,
-    blink: bool = false,
-    fastblink: bool = false,
-    reverse: bool = false,
-    hide: bool = false,
-    strike: bool = false,
-};
-
-pub const Vec2i = struct {
-    x: usize,
-    y: usize,
-};
-
 pub const LinkType = enum(u8) {
     /// A link which can be resolved to a file on the local filesystem.
     local,

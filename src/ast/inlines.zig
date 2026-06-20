@@ -5,8 +5,15 @@ const tokens = @import("../tokens.zig");
 
 const Allocator = std.mem.Allocator;
 
-const TextStyle = utils.TextStyle;
 const Token = tokens.Token;
+
+/// Styles which can be applied to Markdown text
+pub const TextStyle = struct {
+    bold: bool = false,
+    italic: bool = false,
+    underline: bool = false,
+    strike: bool = false,
+};
 
 /// Inlines are considered Phrasing content
 /// Phrasing content represents the text in a document, and its markup

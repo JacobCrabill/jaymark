@@ -13,13 +13,13 @@ const toks = @import("../tokens.zig");
 const inls = @import("../ast/inlines.zig");
 const utils = @import("utils.zig");
 
-const TextStyle = @import("../utils.zig").TextStyle;
 const TokenType = toks.TokenType;
 const Token = toks.Token;
 const TokenList = toks.TokenList;
 
 const InlineType = inls.InlineType;
 const Inline = inls.Inline;
+const TextStyle = inls.TextStyle;
 
 const ParserOpts = utils.ParserOpts;
 const appendWords = utils.appendWords;

@@ -2,9 +2,6 @@ const std = @import("std");
 
 const utils = @import("../utils.zig");
 const toks = @import("../tokens.zig");
-const blocks = @import("../ast/blocks.zig");
-const containers = @import("../ast/containers.zig");
-const leaves = @import("../ast/leaves.zig");
 const inls = @import("../ast/inlines.zig");
 
 const Allocator = std.mem.Allocator;
@@ -12,16 +9,11 @@ const ArrayList = std.array_list.Managed;
 
 const TokenType = toks.TokenType;
 const Token = toks.Token;
-const TokenList = toks.TokenList;
 
-const TextStyle = utils.TextStyle;
-const Text = inls.Text;
 const Inline = inls.Inline;
 const InlineData = inls.InlineData;
-
-const debug = @import("../debug.zig");
-const errorReturn = debug.errorReturn;
-const errorMsg = debug.errorMsg;
+const Text = inls.Text;
+const TextStyle = inls.TextStyle;
 
 /// Options to configure the Parsers
 pub const ParserOpts = struct {
