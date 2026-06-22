@@ -1327,6 +1327,7 @@ test "Formatter" {
 
     for (test_data) |data| {
         const output = try testRender(std.testing.io, alloc, data.input, data.width);
+        defer alloc.free(output);
         try std.testing.expectEqualSlices(u8, data.output, output);
 
         // _ = arena.reset(.retain_capacity);

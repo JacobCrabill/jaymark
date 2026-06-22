@@ -10,7 +10,7 @@ const ArrayList = std.array_list.Managed;
 const Allocator = std.mem.Allocator;
 const GPA = std.heap.GeneralPurposeAllocator;
 
-/// Common types from the Zigdown namespace
+/// Common types from the Jaymark namespace
 const TokenType = toks.TokenType;
 const Token = toks.Token;
 const TokenList = toks.TokenList;

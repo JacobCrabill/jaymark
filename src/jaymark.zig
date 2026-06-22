@@ -1,6 +1,6 @@
-//! Zigdown: Markdown Toolset in Zig.
+//! Jaymark: Markdown Toolset in Zig.
 //!
-//! This module exposes the entire Zigdown package,
+//! This module exposes the entire Jaymark package,
 //! including all of its dependencies.
 
 // Expose dependencies to downstream consumers
@@ -15,7 +15,7 @@ pub const tokens = @import("tokens.zig");
 pub const utils = @import("utils.zig");
 pub const blocks = @import("ast/blocks.zig");
 
-// Global public Zigdown types
+// Global public Jaymark types
 // pub const Markdown = markdown.Markdown;
 pub const Block = blocks.Block;
 pub const Container = blocks.Container;

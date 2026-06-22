@@ -468,7 +468,7 @@ test extractLinksFromDocument {
 
     const doc_text =
         \\# Title
-        \\- [This points to a .md file in the repo to be rendered as HTML](./test/alert.html)
+        \\- [This points to a .md file in the repo to be rendered as HTML](./src/../README.html)
         \\  - lorem ipsum [Link to a web URL](www.bar.com) sit dolor
         \\  - [another url](https://jcrabill.dev)
         \\- [A file that actually exists](src/jaymark.zig)
@@ -480,7 +480,7 @@ test extractLinksFromDocument {
         \\![Image, Not Link](ziggy.png)
         \\[duplicate link](www.bar.com)
         \\[not duplicate, bc non-existent](foo/bar/baz)
-        \\[yet another duplicate link](test/alert)
+        \\[yet another duplicate link](README.md)
         \\
         \\> [!INFO]
         \\> Links are allowed in [github alert boxes](docs.github.com)
@@ -489,7 +489,7 @@ test extractLinksFromDocument {
     ;
 
     const expected_links: []const NavLink = &.{
-        .{ .kind = .local, .text = "This points to a .md file in the repo to be rendered as HTML", .uri = "test/alert.md" },
+        .{ .kind = .local, .text = "This points to a .md file in the repo to be rendered as HTML", .uri = "README.md" },
         .{ .kind = .remote, .text = "Link to a web URL", .uri = "www.bar.com" },
         .{ .kind = .remote, .text = "another url", .uri = "https://jcrabill.dev" },
         .{ .kind = .local, .text = "A file that actually exists", .uri = "src/jaymark.zig" },
@@ -675,7 +675,7 @@ test pathToUri {
     // Note: these must be real files...
     const test_data: []const TestData = &.{
         .{ .input = "src/utils.zig", .expected = "src/utils.zig", .opts = .{ .current_dir = cwd, .relative = true } },
-        .{ .input = "test/alert", .expected = "test/alert.md", .opts = .{ .current_dir = cwd, .relative = true } },
+        .{ .input = "src/../README", .expected = "README.md", .opts = .{ .current_dir = cwd, .relative = true } },
         .{ .input = "Hello, World", .expected = "#hello,-world", .opts = .{ .replace_whitespace = true, .lowercase = true, .fragment = true } },
         .{ .input = "Hello, World", .expected = "#hello,%20world", .opts = .{ .lowercase = true, .fragment = true } },
     };

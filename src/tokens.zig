@@ -1,5 +1,5 @@
 /// tokens.zig
-/// Defines all possible Markdown tokens used by Zigdown.
+/// Defines all possible Markdown tokens used by Jaymark.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.array_list.Managed;
