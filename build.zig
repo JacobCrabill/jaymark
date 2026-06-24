@@ -39,20 +39,18 @@ pub fn build(b: *std.Build) !void {
     _ = no_bin; // autofix
 
     // Export the jaymark module to downstream consumers
-    const mod = b.addModule("jaymark", .{
-        .root_source_file = b.path("src/lib/jaymark.zig"),
+    const jaymark = b.addModule("jaymark", .{
+        .root_source_file = b.path("src/jaymark.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const mod_dep = Dependency{ .name = "jaymark", .module = mod };
-    _ = mod_dep; // autofix
 
     // Generate documentation for jaymark and its dependencies by building a library.
     // Note that the main page of the generated documentation will be the root_source_file
     // of the library target.
     const lib = b.addLibrary(.{
         .name = "jaymark",
-        .root_module = mod,
+        .root_module = jaymark,
         .linkage = .static,
     });
 
@@ -74,11 +72,7 @@ pub fn build(b: *std.Build) !void {
     ////////////////////////////////////////////////////////////////////////////
 
     const test_exe = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/test.zig"),
-            .optimize = optimize,
-            .target = target,
-        }),
+        .root_module = jaymark,
         .test_runner = .{ .path = b.path("tools/test_runner.zig"), .mode = .simple },
     });
     const run_step = b.addRunArtifact(test_exe);

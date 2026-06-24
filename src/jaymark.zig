@@ -3,10 +3,6 @@
 //! This module exposes the entire Jaymark package,
 //! including all of its dependencies.
 
-// Expose dependencies to downstream consumers
-pub const stbi = @import("stb_image");
-pub const flags = @import("flags");
-
 // Expose public namespaces for building docs
 pub const debug = @import("debug.zig");
 pub const lexer = @import("lexer.zig");
@@ -24,3 +20,7 @@ pub const Token = tokens.Token;
 pub const TokenType = tokens.TokenType;
 pub const Parser = parser.Parser;
 pub const Lexer = lexer.Lexer;
+
+test "All Tests" {
+    @import("std").testing.refAllDecls(@This());
+}

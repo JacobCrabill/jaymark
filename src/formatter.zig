@@ -26,7 +26,7 @@ const numlist_indent_100 = Text{ .style = .{}, .text = "     " };
 const numlist_indent_1000 = Text{ .style = .{}, .text = "      " };
 const task_list_indent = Text{ .style = .{}, .text = "      " };
 
-pub const RenderError = Writer.Error || Allocator.Error || Block.Error || error{NoSpaceLeft};
+pub const Error = Writer.Error || Allocator.Error || Block.Error || error{NoSpaceLeft};
 
 /// Auto-Format a Markdown document.
 /// Keeps all the same content, but normalizes whitespace, symbols, etc.
@@ -363,7 +363,7 @@ pub const Formatter = struct {
     }
 
     /// Render a generic Block (may be a Container or a Leaf)
-    pub fn renderBlock(self: *Self, block: Block) RenderError!void {
+    pub fn renderBlock(self: *Self, block: Block) Error!void {
         if (self.root == null) {
             self.root = block;
         }
@@ -374,7 +374,7 @@ pub const Formatter = struct {
     }
 
     /// Render a Container block
-    pub fn renderContainer(self: *Self, block: Container) RenderError!void {
+    pub fn renderContainer(self: *Self, block: Container) Error!void {
         switch (block.content) {
             .Document => try self.renderDocument(block),
             .Quote => try self.renderQuote(block),
@@ -385,7 +385,7 @@ pub const Formatter = struct {
     }
 
     /// Render a Leaf block
-    pub fn renderLeaf(self: *Self, block: Leaf) RenderError!void {
+    pub fn renderLeaf(self: *Self, block: Leaf) Error!void {
         if (self.needs_leaders) {
             self.writeLeaders();
             self.needs_leaders = false;
@@ -402,7 +402,7 @@ pub const Formatter = struct {
     // Container Rendering Functions --------------------------------------
 
     /// Render a Document block (contains only other blocks)
-    fn renderDocument(self: *Self, doc: Container) RenderError!void {
+    fn renderDocument(self: *Self, doc: Container) Error!void {
         self.renderBegin();
         for (doc.children.items, 0..) |block, i| {
             try self.renderBlock(block);
@@ -438,7 +438,7 @@ pub const Formatter = struct {
     }
 
     /// Render a List of Items (may be ordered or unordered)
-    fn renderList(self: *Self, list: Container) RenderError!void {
+    fn renderList(self: *Self, list: Container) Error!void {
         switch (list.content.List.kind) {
             .ordered => try self.renderNumberedList(list),
             .unordered => try self.renderUnorderedList(list),
@@ -447,7 +447,7 @@ pub const Formatter = struct {
     }
 
     /// Render an unordered list of items
-    fn renderUnorderedList(self: *Self, list: Container) RenderError!void {
+    fn renderUnorderedList(self: *Self, list: Container) Error!void {
         for (list.children.items, 0..) |item, i| {
             // Ensure we start each list item on a new line
             if (self.column > self.opts.indent)
@@ -474,7 +474,7 @@ pub const Formatter = struct {
     }
 
     /// Render an ordered (numbered) list of items
-    fn renderNumberedList(self: *Self, list: Container) RenderError!void {
+    fn renderNumberedList(self: *Self, list: Container) Error!void {
         const start: usize = list.content.List.start;
         var buffer: [16]u8 = undefined;
         for (list.children.items, 0..) |item, i| {
