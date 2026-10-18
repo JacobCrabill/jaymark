@@ -2,6 +2,9 @@ const std = @import("std");
 
 const utils = @import("../utils.zig");
 const toks = @import("../tokens.zig");
+const blocks = @import("../ast/blocks.zig");
+const containers = @import("../ast/containers.zig");
+const leaves = @import("../ast/leaves.zig");
 const inls = @import("../ast/inlines.zig");
 
 const Allocator = std.mem.Allocator;
@@ -9,11 +12,16 @@ const ArrayList = std.array_list.Managed;
 
 const TokenType = toks.TokenType;
 const Token = toks.Token;
+const TokenList = toks.TokenList;
 
+const TextStyle = inls.TextStyle;
+const Text = inls.Text;
 const Inline = inls.Inline;
 const InlineData = inls.InlineData;
-const Text = inls.Text;
-const TextStyle = inls.TextStyle;
+
+const debug = @import("../debug.zig");
+const errorReturn = debug.errorReturn;
+const errorMsg = debug.errorMsg;
 
 /// Options to configure the Parsers
 pub const ParserOpts = struct {
@@ -598,20 +606,28 @@ test validateLink {
     }
 }
 
+/// Count all instances of the 'kind' token in the given line,
+/// ignoring any tokens within an inline code span.
 pub fn countKind(line: []const Token, kind: TokenType) usize {
     var count: usize = 0;
+    var in_code: bool = false;
     for (line) |tok| {
-        if (tok.kind == kind) count += 1;
+        if (tok.kind == .CODE_INLINE) in_code = !in_code;
+        if (tok.kind == kind and !in_code) count += 1;
     }
     return count;
 }
 
 /// Find the index of the first occurance of a 'kind' Token beginning from 'start_index' (inclusive).
 ///
+/// Skips tokens inside an inline code span.
+///
 /// The index is relative to the start of the 'line' slice.
 pub fn indexOfTokenPos(line: []const Token, start_index: usize, kind: TokenType) ?usize {
+    var in_code: bool = false;
     for (line[start_index..], start_index..) |tok, i| {
-        if (tok.kind == kind) return i;
+        if (tok.kind == .CODE_INLINE) in_code = !in_code;
+        if (tok.kind == kind and !in_code) return i;
     }
     return null;
 }
