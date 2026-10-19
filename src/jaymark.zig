@@ -10,6 +10,9 @@ pub const parser = @import("parser.zig");
 pub const tokens = @import("tokens.zig");
 pub const utils = @import("utils.zig");
 pub const blocks = @import("ast/blocks.zig");
+pub const containers = @import("ast/containers.zig");
+pub const inlines = @import("ast/inlines.zig");
+pub const leaves = @import("ast/leaves.zig");
 pub const formatter = @import("formatter.zig");
 
 // Global public Jaymark types
