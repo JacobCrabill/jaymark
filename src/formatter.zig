@@ -85,6 +85,16 @@ pub const Formatter = struct {
         self.style_stack.deinit();
     }
 
+    /// Format a Markdown AST, starting from the root Document block.
+    ///
+    /// Returns a formatted version of the given document backed by the
+    /// Formatter's Allocator instance.
+    pub fn format(self: *Formatter, document: Block) ![]const u8 {
+        try self.renderBlock(document);
+        defer self.writer.clearRetainingCapacity();
+        return try self.writer.toOwnedSlice();
+    }
+
     /// Configure the terminal to start printing with the given (single) style
     /// Attempts to be 'minimally invasive' by monitoring current style and
     /// changing only what is necessary
@@ -351,16 +361,6 @@ pub const Formatter = struct {
     }
 
     // Top-Level Block Rendering Functions --------------------------------
-
-    /// The render entrypoint from the Renderer interface.
-    ///
-    /// Returns a formatted version of the given document backed by the
-    /// Formatter's Allocator instance.
-    pub fn format(self: *Formatter, document: Block) ![]const u8 {
-        try self.renderBlock(document);
-        defer self.writer.clearRetainingCapacity();
-        return try self.writer.toOwnedSlice();
-    }
 
     /// Render a generic Block (may be a Container or a Leaf)
     pub fn renderBlock(self: *Self, block: Block) Error!void {
@@ -1321,9 +1321,6 @@ test "Formatter" {
     // We _could_ use an arena for speed, and simply clear it between tests.
     // That would be significantly faster.
     // However, checking for leaks is valuable, so I'll stick to the testing allocator for now.
-    // var arena = std.heap.ArenaAllocator.init(alloc);
-    // defer arena.deinit();
-    // const alloc = arena.allocator();
 
     for (test_data) |data| {
         const output = try testRender(std.testing.io, alloc, data.input, data.width);

@@ -3,7 +3,7 @@
 ![jaymark-logo](jaymark-256.png)
 
 > [!TIP]
-> Zig 0.16.x Required
+> Zig 0.17.x Required
 
 - [Features](#tools-&-features)
   - [Parser Features](#parser-features)
@@ -60,7 +60,13 @@ subset of all Markdown syntax, and ignoring anything I personally find useless o
 
 ## Usage
 
+### Building
+
 The current version of Zig this code compiles with is
-[0.16.0](https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz). I highly recommend
+[0.17.0](https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz). I highly recommend
 using the [Zig version manager](https://github.com/tristanisham/zvm) to install and manage various
 Zig versions.
+
+### Use in another Zig project
+
+TODO

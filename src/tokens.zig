@@ -1,4 +1,3 @@
-/// tokens.zig
 /// Defines all possible Markdown tokens used by Jaymark.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -7,48 +6,18 @@ const ArrayList = std.array_list.Managed;
 const utils = @import("utils.zig");
 const debug = @import("debug.zig");
 
+// zig fmt: off
 pub const TokenType = enum {
-    EOF,
-    WORD,
-    DIGIT,
-    INDENT,
-    SPACE,
-    BREAK,
-    HASH,
-    DIRECTIVE,
-    CODE_INLINE,
-    PLUS,
-    MINUS,
-    STAR,
-    USCORE,
-    TILDE,
-    PERIOD,
-    COMMA,
-    EQUAL,
-    BANG,
-    QUERY,
-    AT,
-    DOLLAR,
-    PERCENT,
-    CARET,
-    AND,
-    LT,
-    GT,
-    LPAREN,
-    RPAREN,
-    LBRACK,
-    RBRACK,
-    LCURLY,
-    RCURLY,
-    SLASH,
-    BSLASH,
-    PIPE,
-    BOLD,
-    EMBOLD,
-    COLON,
-    ESCAPED,
-    UNKNOWN,
+    EOF, WORD, DIGIT, INDENT, SPACE, BREAK,
+    HASH, DIRECTIVE, CODE_INLINE,
+    PLUS, MINUS, STAR, DOLLAR, USCORE, COLON,
+    TILDE, PERIOD, COMMA, EQUAL, BANG, QUERY, AT,
+    PERCENT, CARET, AND, LT, GT,
+    LPAREN, RPAREN, LBRACK, RBRACK, LCURLY, RCURLY,
+    SLASH, BSLASH, PIPE, BOLD, EMBOLD,
+    ESCAPED, UNKNOWN,
 };
+// zig fmt: on
 
 pub const SourceLocation = struct {
     row: usize = 0,
@@ -295,6 +264,10 @@ pub fn concatWords(alloc: Allocator, tokens: []const Token) ![]const u8 {
     return try std.mem.concat(alloc, u8, words.items);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Tests
+///////////////////////////////////////////////////////////////////////////////
+
 test "EscapeTokenizer: backslash-pipe produces ESCAPED token" {
     const tok = EscapeTokenizer.peek("\\|rest").?;
     try std.testing.expectEqual(TokenType.ESCAPED, tok.kind);
@@ -307,24 +280,4 @@ test "EscapeTokenizer: lone backslash does not produce ESCAPED token" {
 
 test "EscapeTokenizer: backslash-letter does not produce ESCAPED token" {
     try std.testing.expect(EscapeTokenizer.peek("\\n") == null);
-}
-
-test "Lexer: escaped pipe tokenizes as ESCAPED" {
-    const lexer = @import("lexer.zig");
-    var lex = lexer.Lexer{};
-    var tokens = try lex.tokenize(std.testing.allocator, "\\|");
-    defer tokens.deinit();
-    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
-    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
-    try std.testing.expectEqualStrings("\\|", tokens.items[0].text);
-}
-
-test "Lexer: escaped backslash tokenizes as ESCAPED" {
-    const lexer = @import("lexer.zig");
-    var lex = lexer.Lexer{};
-    var tokens = try lex.tokenize(std.testing.allocator, "\\\\");
-    defer tokens.deinit();
-    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
-    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
-    try std.testing.expectEqualStrings("\\\\", tokens.items[0].text);
 }

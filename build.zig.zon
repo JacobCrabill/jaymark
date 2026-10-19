@@ -2,7 +2,7 @@
     .name = .jaymark,
     .fingerprint = 0xc2f0bff934a9f599,
     .version = "1.0.0",
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .paths = .{
         "src",
         "tools",

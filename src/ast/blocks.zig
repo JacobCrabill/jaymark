@@ -462,6 +462,7 @@ test "Print basic AST" {
     debug.init(io, &alloc_writer.writer);
 
     debug.print("Print basic AST result:\n", .{});
+    defer debug.flush();
     root.print(1);
 
     const expected =

@@ -181,3 +181,23 @@ fn compareTokens(expected: Token, actual: Token) !void {
         return err;
     };
 }
+
+test "Lexer: escaped pipe tokenizes as ESCAPED" {
+    const lexer = @import("lexer.zig");
+    var lex = lexer.Lexer{};
+    var tokens = try lex.tokenize(std.testing.allocator, "\\|");
+    defer tokens.deinit();
+    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
+    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
+    try std.testing.expectEqualStrings("\\|", tokens.items[0].text);
+}
+
+test "Lexer: escaped backslash tokenizes as ESCAPED" {
+    const lexer = @import("lexer.zig");
+    var lex = lexer.Lexer{};
+    var tokens = try lex.tokenize(std.testing.allocator, "\\\\");
+    defer tokens.deinit();
+    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
+    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
+    try std.testing.expectEqualStrings("\\\\", tokens.items[0].text);
+}

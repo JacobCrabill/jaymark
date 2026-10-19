@@ -320,12 +320,12 @@ test generateNavigationTree {
     var nav_root_dir = try std.Io.Dir.cwd().openDir(io, "test/navbar", .{});
     defer nav_root_dir.close(io);
 
-    var p = try parser.parseFile(io, alloc, nav_root_dir, "root.md");
-    defer p.deinit();
+    var doc = try parser.parseFile(io, alloc, nav_root_dir, "root.md");
+    defer doc.deinit();
 
     var arena = std.heap.ArenaAllocator.init(alloc);
     defer arena.deinit();
-    const nav_tree = try generateNavigationTree(io, arena.allocator(), nav_root_dir, "root.md", &p.document);
+    const nav_tree = try generateNavigationTree(io, arena.allocator(), nav_root_dir, "root.md", &doc);
 
     // We'll compare all file paths to the repo root
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;

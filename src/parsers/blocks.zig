@@ -280,6 +280,14 @@ pub const Parser = struct {
         self.closeBlock(&self.document);
     }
 
+    /// Return a caller-owned Document block.
+    /// Resets the Parser's Document to an empty block.
+    pub fn toOwnedDocument(self: *Self) !Block {
+        const doc = self.document;
+        self.document = Block.initContainer(self.alloc, .Document, 0);
+        return doc;
+    }
+
     ///////////////////////////////////////////////////////
     // Token & Cursor Interactions
     ///////////////////////////////////////////////////////
@@ -1119,6 +1127,10 @@ pub const Parser = struct {
     }
 };
 
+//////////////////////////////////////////////////////////
+// Tests
+//////////////////////////////////////////////////////////
+
 test "Parser supports table nested in ordered list item" {
     const alloc = std.testing.allocator;
     const input =
@@ -1387,6 +1399,27 @@ test "sub-list blank line does not corrupt outer list spacing" {
     try p.parseMarkdown(input);
 
     const root = p.document.container();
+
+    // Check first element: outer List
+    const outer_list = &root.children.items[0];
+    try std.testing.expect(outer_list.container().content == .List);
+
+    // The spacing of the outer list should be 0 because the empty line was trailing
+    try std.testing.expectEqual(@as(u8, 0), outer_list.container().content.List.spacing);
+}
+
+test "toOwnedDocument transfers ownership to caller" {
+    const alloc = std.testing.allocator;
+    const input = "- Hello, World!\n";
+
+    var p = Parser.init(alloc, .{});
+    try p.parseMarkdown(input);
+    var doc = try p.toOwnedDocument();
+    defer doc.deinit();
+    p.deinit();
+    // p.document should now be a new object
+
+    const root = doc.container();
 
     // Check first element: outer List
     const outer_list = &root.children.items[0];

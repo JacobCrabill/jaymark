@@ -2,35 +2,31 @@ pub const ParserOpts = @import("parsers/utils.zig").ParserOpts;
 pub const Parser = @import("parsers/blocks.zig").Parser;
 pub const InlineParser = @import("parsers/inlines.zig").InlineParser;
 
-pub const ParseResult = struct { time_s: f64, parser: Parser };
-
-pub fn parseFile(io: std.Io, gpa: std.mem.Allocator, dir: std.Io.Dir, file: []const u8) !Parser {
-    const contents = try utils.readFile(io, gpa, dir, file);
+/// Parse a file to its Markdown AST representation.
+///
+/// io: Io implementation to use to load the file from the filesystem.
+/// gpa: General purpose allocator for all allocations.
+/// dir: The directory containing the file.
+/// path: The filepath to the Markdown file relative to `dir`.
+///
+/// Returns the parsed document Block.
+pub fn parseFile(io: std.Io, gpa: std.mem.Allocator, dir: std.Io.Dir, path: []const u8) !Block {
+    const contents = try utils.readFile(io, gpa, dir, path);
     defer gpa.free(contents);
-    var p = Parser.init(gpa, .{});
-    try p.parseMarkdown(contents);
-    return p;
+    return try parse(gpa, contents);
 }
 
-/// Parse a Markdown file and return the time taken and the Parser object
-pub fn timedParse(io: std.Io, alloc: std.mem.Allocator, input: []const u8, verbose: bool) !ParseResult {
-    // Parse the input text
-    const opts = ParserOpts{
-        .copy_input = false,
-        .verbose = verbose,
-    };
-    var p = Parser.init(alloc, opts);
-
-    var ptimer = @import("utils.zig").Timer.start(io);
-    try p.parseMarkdown(input);
-    const ptime_s = ptimer.read();
-
-    if (verbose) {
-        @import("debug.zig").print("AST:\n", .{});
-        p.document.print(0);
-    }
-
-    return .{ .time_s = ptime_s, .parser = p };
+/// Parse a file to its Markdown AST representation.
+///
+/// gpa: General purpose allocator for all allocations.
+/// contents: The raw Markdown file contents to parse.
+///
+/// Returns the parsed document Block.
+pub fn parse(gpa: std.mem.Allocator, contents: []const u8) !Block {
+    var p = Parser.init(gpa, .{});
+    defer p.deinit();
+    try p.parseMarkdown(contents);
+    return try p.toOwnedDocument();
 }
 
 //////////////////////////////////////////////////////////
@@ -43,3 +39,5 @@ test "All Parser Tests" {
 
 const std = @import("std");
 const utils = @import("utils.zig");
+
+const Block = @import("ast/blocks.zig").Block;
