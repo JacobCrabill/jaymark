@@ -120,6 +120,12 @@ pub const Block = union(BlockType) {
         }
     }
 
+    pub fn debugPrint(self: Self) void {
+        switch (self) {
+            inline else => |b| b.print(0),
+        }
+    }
+
     pub fn print(self: Self, depth: u8) void {
         switch (self) {
             inline else => |b| b.print(depth),

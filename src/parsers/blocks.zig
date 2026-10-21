@@ -243,8 +243,8 @@ pub const Parser = struct {
         self.document.deinit();
     }
 
-    /// Parse the document
-    pub fn parseMarkdown(self: *Self, text: []const u8) !void {
+    /// Parse a document.
+    pub fn parse(self: *Self, text: []const u8) !void {
         self.reset();
 
         // Allocate copy of the input text if requested
@@ -1143,7 +1143,7 @@ test "Parser supports table nested in ordered list item" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
@@ -1179,7 +1179,7 @@ test "Parser: pipe inside inline code is not a table column separator" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
@@ -1205,7 +1205,7 @@ test "Parser supports table nested in task list item" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     const list = &root.children.items[0];
@@ -1229,7 +1229,7 @@ test "Parser: unordered list item with table, no blank line" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
@@ -1263,7 +1263,7 @@ test "Parser: unordered list item with table, with blank line, spacing preserved
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     const list = &root.children.items[0];
@@ -1294,7 +1294,7 @@ test "Parser: table row interrupts open paragraph" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     // Should have 2 children: Paragraph("Some text") + Table
@@ -1315,7 +1315,7 @@ test "paragraph with lone tilde has no strikethrough inlines" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown("Temperature is ~20 degrees C");
+    try p.parse("Temperature is ~20 degrees C");
 
     const root = p.document.container();
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
@@ -1333,7 +1333,7 @@ test "paragraph with matched tildes has strikethrough inlines" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown("This is ~struck~ text");
+    try p.parse("This is ~struck~ text");
 
     const root = p.document.container();
     const para = root.children.items[0].leaf();
@@ -1360,7 +1360,7 @@ test "Parser: escaped pipe in table cell is not a column separator" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
     const table = &root.children.items[0];
@@ -1396,7 +1396,7 @@ test "sub-list blank line does not corrupt outer list spacing" {
 
     var p = Parser.init(alloc, .{});
     defer p.deinit();
-    try p.parseMarkdown(input);
+    try p.parse(input);
 
     const root = p.document.container();
 
@@ -1413,7 +1413,7 @@ test "toOwnedDocument transfers ownership to caller" {
     const input = "- Hello, World!\n";
 
     var p = Parser.init(alloc, .{});
-    try p.parseMarkdown(input);
+    try p.parse(input);
     var doc = try p.toOwnedDocument();
     defer doc.deinit();
     p.deinit();

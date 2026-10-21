@@ -69,4 +69,29 @@ Zig versions.
 
 ### Use in another Zig project
 
-TODO
+Fetch a specific version; this will update your `build.zig.zon`:
+
+```sh
+zig fetch --save https://github.com/JacobCrabill/jaymark/archive/<commit-sha>.tar.gz
+```
+
+Import the module in your `build.zig`:
+
+```zig
+const jaymark = b.dependency("jaymark", .{ .target = target, .optimize = optimize });
+my_exe.root_module.addImport("jaymark", jaymark.module("jaymark"));
+```
+
+Use it in your code:
+
+```zig
+const jaymark = @import("jaymark");
+
+// Parse to the Markdown syntax tree (returns the root Document block)
+const ast = try jaymark.parse(gpa, "# Hello, World!\n");
+ast.debugPrint(); // defaults to stderr; see `jaymark.debug.init()`
+
+// Auto-format the document (returns a new heap-allocated string)
+const formatted = try jaymark.format(io, gpa, "#   Hello, World!  \n", 90);
+try std.testing.expectEqualStrings(" # Hello, World!\n", formatted);
+```

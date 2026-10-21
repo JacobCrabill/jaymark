@@ -1,42 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Build = std.Build;
-const Allocator = std.mem.Allocator;
-
-const Target = std.Build.ResolvedTarget;
-const OptimizeMode = std.builtin.OptimizeMode;
-const Options = std.Build.Step.Options;
-
-const Dependency = struct {
-    name: []const u8,
-    module: *std.Build.Module,
-};
-
-const ExeConfig = struct {
-    version: ?std.SemanticVersion = null, // The version of the executable
-    name: []const u8, // The name for the generated executable
-    build_cmd: []const u8, // The build step name ('zig build <cmd>')
-    build_description: []const u8, // The description for the build step ('zig build -l')
-    run_cmd: []const u8, // The run step name ('zig build <cmd>')
-    run_description: []const u8, //  The description for the run step ('zig build -l')
-    root_path: []const u8, // The zig file containing main()
-};
-
-const BuildOpts = struct {
-    optimize: OptimizeMode,
-    target: ?Target = null,
-    dependencies: ?[]Dependency = null,
-    options: *Options,
-    use_llvm: bool = false,
-    no_bin: bool = false,
-};
 
 pub fn build(b: *std.Build) !void {
-    const target: Target = b.standardTargetOptions(.{});
-    const optimize: OptimizeMode = b.standardOptimizeOption(.{});
-
-    const no_bin = b.option(bool, "no-bin", "Just check compilation (don't emit binaries)") orelse false;
-    _ = no_bin; // autofix
+    const target: std.Build.ResolvedTarget = b.standardTargetOptions(.{});
+    const optimize: std.builtin.OptimizeMode = b.standardOptimizeOption(.{});
 
     // Export the jaymark module to downstream consumers
     const jaymark = b.addModule("jaymark", .{

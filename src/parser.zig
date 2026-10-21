@@ -25,7 +25,7 @@ pub fn parseFile(io: std.Io, gpa: std.mem.Allocator, dir: std.Io.Dir, path: []co
 pub fn parse(gpa: std.mem.Allocator, contents: []const u8) !Block {
     var p = Parser.init(gpa, .{});
     defer p.deinit();
-    try p.parseMarkdown(contents);
+    try p.parse(contents);
     return try p.toOwnedDocument();
 }
 

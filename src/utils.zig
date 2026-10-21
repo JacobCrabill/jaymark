@@ -281,7 +281,7 @@ fn generateNavBarRecurse(io: std.Io, alloc: Allocator, visited: *std.ArrayList([
             // Only recurse if its path has not already been visited.
             if (readFile(io, arena.allocator(), dir, nav_item.uri)) |contents| {
                 var p = parser.Parser.init(arena.allocator(), .{});
-                try p.parseMarkdown(contents);
+                try p.parse(contents);
                 const child_doc: Block = p.document;
 
                 if (getDocumentTitle(&child_doc)) |title| {
@@ -502,7 +502,7 @@ test extractLinksFromDocument {
     // ---- Arrange
 
     var p = @import("parser.zig").Parser.init(alloc, .{});
-    try p.parseMarkdown(doc_text);
+    try p.parse(doc_text);
     defer p.deinit();
 
     const doc = p.document;

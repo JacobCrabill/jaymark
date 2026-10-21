@@ -912,7 +912,7 @@ pub const Formatter = struct {
 
 fn testRender(io: std.Io, alloc: Allocator, input: []const u8, width: usize) ![]const u8 {
     var p = @import("parser.zig").Parser.init(alloc, .{});
-    try p.parseMarkdown(input);
+    try p.parse(input);
     defer p.deinit();
 
     var r = Formatter.init(io, alloc, .{ .width = width });

@@ -63,12 +63,12 @@ pub fn timedParse(io: std.Io, gpa: std.mem.Allocator, input: []const u8, verbose
     defer p.deinit();
 
     var ptimer = @import("utils.zig").Timer.start(io);
-    try p.parseMarkdown(input);
+    try p.parse(input);
     const ptime_s = ptimer.read();
 
     if (verbose) {
         debug.print("AST:\n", .{});
-        p.document.print(0);
+        p.document.debugPrint();
     }
 
     return .{ .time_s = ptime_s, .document = try p.toOwnedDocument() };
@@ -123,7 +123,7 @@ test format {
     const actual = try format(std.testing.io, gpa, input, 90);
     defer gpa.free(actual);
 
-    try std.testing.expectEqualSlices(u8, expected, actual);
+    try std.testing.expectEqualStrings(expected, actual);
 }
 
 const std = @import("std");
