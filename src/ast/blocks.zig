@@ -8,7 +8,7 @@ const leaves = @import("leaves.zig");
 const containers = @import("containers.zig");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 
 const Lexer = lexer.Lexer;
 const TokenType = toks.TokenType;
@@ -139,14 +139,13 @@ pub const Container = struct {
     alloc: Allocator,
     content: ContainerData,
     open: bool = true,
-    children: ArrayList(Block),
+    children: ArrayList(Block) = .empty,
     start_col: usize = 0, // The starting column of the first line of this block
 
     pub fn init(alloc: Allocator, kind: ContainerType, col: usize) Self {
         var block = Container{
             .alloc = alloc,
             .content = undefined,
-            .children = ArrayList(Block).init(alloc),
             .start_col = col,
         };
 
@@ -165,7 +164,7 @@ pub const Container = struct {
         for (self.children.items) |*child| {
             child.deinit();
         }
-        self.children.deinit();
+        self.children.deinit(self.alloc);
 
         switch (self.content) {
             .Table => |*t| {
@@ -177,7 +176,7 @@ pub const Container = struct {
     }
 
     pub fn addChild(self: *Self, child: Block) !void {
-        try self.children.append(child);
+        try self.children.append(self.alloc, child);
     }
 
     pub fn lastChild(self: *Self) ?*Block {
@@ -241,16 +240,14 @@ pub const Leaf = struct {
     const Self = @This();
     alloc: Allocator,
     content: LeafData,
-    raw_contents: ArrayList(Token),
-    inlines: ArrayList(Inline),
+    raw_contents: ArrayList(Token) = .empty,
+    inlines: ArrayList(Inline) = .empty,
     open: bool = true,
     start_col: usize = 0, // The starting column of the first line of this block
 
     pub fn init(alloc: Allocator, kind: LeafType, col: usize) Leaf {
         return Leaf{
             .alloc = alloc,
-            .raw_contents = ArrayList(Token).init(alloc),
-            .inlines = ArrayList(Inline).init(alloc),
             .start_col = col,
             .content = blk: {
                 switch (kind) {
@@ -266,25 +263,25 @@ pub const Leaf = struct {
 
     pub fn deinit(self: *Self) void {
         self.content.deinit();
-        self.raw_contents.deinit();
+        self.raw_contents.deinit(self.alloc);
         for (self.inlines.items) |*item| {
             item.deinit();
         }
-        self.inlines.deinit();
+        self.inlines.deinit(self.alloc);
     }
 
     pub fn addInline(self: *Self, item: Inline) !void {
-        try self.inlines.append(item);
+        try self.inlines.append(self.alloc, item);
     }
 
     /// Append a chunk of Text to our inlines
     pub fn addText(self: *Self, text: Text) !void {
-        try self.inlines.append(Inline.initWithContent(self.alloc, .{ .text = text }));
+        try self.inlines.append(self.alloc, Inline.initWithContent(self.alloc, .{ .text = text }));
     }
 
     /// Append a Link to the contents Paragraph
     pub fn addLink(self: *Self, link: Link) !void {
-        try self.inlines.append(Inline.initWithContent(self.alloc, .{ .link = link }));
+        try self.inlines.append(self.alloc, Inline.initWithContent(self.alloc, .{ .link = link }));
     }
 
     pub fn close(self: *Self) void {
@@ -496,4 +493,20 @@ test "Print basic AST" {
         \\
     ;
     try std.testing.expectEqualStrings(expected, alloc_writer.writer.buffered());
+}
+
+test "sizeof(Block)" {
+    if (@import("builtin").mode == .debug) {
+        // Results of swapping array_list.Managed -> ArrayList:
+        // 224 -> 192
+        try std.testing.expectEqual(192, @sizeOf(Block));
+
+        // 184 -> 168
+        try std.testing.expectEqual(168, @sizeOf(Container));
+
+        // 216 -> 184
+        try std.testing.expectEqual(184, @sizeOf(Leaf));
+        try std.testing.expectEqual(88, @sizeOf(LeafData));
+        try std.testing.expectEqual(32, @sizeOf(ArrayList(Token)));
+    }
 }

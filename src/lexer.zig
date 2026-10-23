@@ -6,7 +6,7 @@ const debug = @import("debug.zig");
 const toks = @import("tokens.zig");
 const utils = @import("utils.zig");
 
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const GPA = std.heap.GeneralPurposeAllocator;
 
@@ -31,12 +31,12 @@ pub const Lexer = struct {
     pub fn tokenize(self: *Lexer, alloc: Allocator, text: []const u8) !ArrayList(Token) {
         self.setText(text);
 
-        var tokens = ArrayList(Token).init(alloc);
+        var tokens: ArrayList(Token) = .empty;
         var token = self.next();
-        try tokens.append(token);
+        try tokens.append(alloc, token);
         while (token.kind != .EOF) {
             token = self.next();
-            try tokens.append(token);
+            try tokens.append(alloc, token);
         }
         return tokens;
     }
@@ -186,7 +186,7 @@ test "Lexer: escaped pipe tokenizes as ESCAPED" {
     const lexer = @import("lexer.zig");
     var lex = lexer.Lexer{};
     var tokens = try lex.tokenize(std.testing.allocator, "\\|");
-    defer tokens.deinit();
+    defer tokens.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
     try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
     try std.testing.expectEqualStrings("\\|", tokens.items[0].text);
@@ -196,7 +196,7 @@ test "Lexer: escaped backslash tokenizes as ESCAPED" {
     const lexer = @import("lexer.zig");
     var lex = lexer.Lexer{};
     var tokens = try lex.tokenize(std.testing.allocator, "\\\\");
-    defer tokens.deinit();
+    defer tokens.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
     try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
     try std.testing.expectEqualStrings("\\\\", tokens.items[0].text);

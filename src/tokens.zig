@@ -1,7 +1,7 @@
 /// Defines all possible Markdown tokens used by Jaymark.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 
 const utils = @import("utils.zig");
 const debug = @import("debug.zig");
@@ -254,11 +254,11 @@ pub fn printText(tokens: []const Token) void {
 
 /// Concatenate the raw text of each token into a single string
 pub fn concatWords(alloc: Allocator, tokens: []const Token) ![]const u8 {
-    var words = ArrayList([]const u8).init(alloc);
-    defer words.deinit();
+    var words = try ArrayList([]const u8).initCapacity(alloc, tokens.len);
+    defer words.deinit(alloc);
 
     for (tokens) |tok| {
-        try words.append(tok.text);
+        try words.append(alloc, tok.text);
     }
 
     return try std.mem.concat(alloc, u8, words.items);

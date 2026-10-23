@@ -8,7 +8,7 @@ const utils = @import("utils.zig");
 const debug = @import("debug.zig");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 const Writer = std.Io.Writer;
 
 const Block = blocks.Block;
@@ -53,7 +53,7 @@ pub const Formatter = struct {
     alloc: std.mem.Allocator,
     opts: Config = undefined,
     column: usize = 0,
-    leader_stack: ArrayList(Text),
+    leader_stack: ArrayList(Text) = .empty,
     needs_leaders: bool = true,
     cur_style: TextStyle = .{},
     root: ?Block = null,
@@ -62,7 +62,7 @@ pub const Formatter = struct {
     mode: RenderMode = .normal,
     /// In order to track the order in which to start/end each style,
     /// we need a stack to push/pop each modification from
-    style_stack: ArrayList(StyleFlag) = undefined,
+    style_stack: ArrayList(StyleFlag) = .empty,
 
     /// Create a new Formatter
     pub fn init(io: std.Io, alloc: Allocator, opts: Config) Self {
@@ -70,19 +70,17 @@ pub const Formatter = struct {
             .io = io,
             .alloc = alloc,
             .opts = opts,
-            .leader_stack = ArrayList(Text).init(alloc),
             .scratch = Writer.Allocating.initCapacity(alloc, 1024) catch @panic("OOM"),
             .writer = Writer.Allocating.initCapacity(alloc, 1024) catch @panic("OOM"),
-            .style_stack = ArrayList(StyleFlag).init(alloc),
         };
     }
 
     /// Deinitialize the object, freeing any owned memory allocations
     pub fn deinit(self: *Self) void {
-        self.leader_stack.deinit();
+        self.leader_stack.deinit(self.alloc);
         self.scratch.deinit();
         self.writer.deinit();
-        self.style_stack.deinit();
+        self.style_stack.deinit(self.alloc);
     }
 
     /// Format a Markdown AST, starting from the root Document block.
@@ -150,15 +148,15 @@ pub const Formatter = struct {
 
         // -- Starting Styles
         if (style.strike and !self.cur_style.strike) {
-            self.style_stack.append(.strike) catch @panic("OOM");
+            self.style_stack.append(self.alloc, .strike) catch @panic("OOM");
             self.write("~");
         }
         if (style.italic and !self.cur_style.italic) {
-            self.style_stack.append(.italic) catch @panic("OOM");
+            self.style_stack.append(self.alloc, .italic) catch @panic("OOM");
             self.write("_");
         }
         if (style.bold and !self.cur_style.bold) {
-            self.style_stack.append(.bold) catch @panic("OOM");
+            self.style_stack.append(self.alloc, .bold) catch @panic("OOM");
             self.write("**");
         }
 
@@ -421,7 +419,7 @@ pub const Formatter = struct {
             self.writeLeaders();
             self.needs_leaders = false;
         }
-        try self.leader_stack.append(quote_indent);
+        try self.leader_stack.append(self.alloc, quote_indent);
         defer _ = self.leader_stack.pop();
 
         self.write(quote_indent.text);
@@ -467,7 +465,7 @@ pub const Formatter = struct {
             // Print out the contents; note the first line doesn't
             // need the leaders (we did that already)
             self.needs_leaders = false;
-            try self.leader_stack.append(list_indent);
+            try self.leader_stack.append(self.alloc, list_indent);
             defer _ = self.leader_stack.pop();
             try self.renderListItem(item.Container, list.content.List.spacing);
         }
@@ -499,13 +497,13 @@ pub const Formatter = struct {
             // Hacky, but makes life easier, and what are you doing with
             // a 10,000-line-long numbered Markdown list anyways?
             if (num < 10) {
-                try self.leader_stack.append(numlist_indent_0);
+                try self.leader_stack.append(self.alloc, numlist_indent_0);
             } else if (num < 100) {
-                try self.leader_stack.append(numlist_indent_10);
+                try self.leader_stack.append(self.alloc, numlist_indent_10);
             } else if (num < 1000) {
-                try self.leader_stack.append(numlist_indent_100);
+                try self.leader_stack.append(self.alloc, numlist_indent_100);
             } else {
-                try self.leader_stack.append(numlist_indent_1000);
+                try self.leader_stack.append(self.alloc, numlist_indent_1000);
             }
             defer _ = self.leader_stack.pop();
 
@@ -538,7 +536,7 @@ pub const Formatter = struct {
             // Print out the contents; note the first line doesn't
             // need the leaders (we did that already)
             self.needs_leaders = false;
-            try self.leader_stack.append(task_list_indent);
+            try self.leader_stack.append(self.alloc, task_list_indent);
             defer _ = self.leader_stack.pop();
             try self.renderListItem(item.Container, list.content.List.spacing);
         }
@@ -572,7 +570,7 @@ pub const Formatter = struct {
         const Cell = struct {
             text: []const u8 = undefined,
         };
-        var cells = ArrayList(Cell).init(alloc);
+        var cells: ArrayList(Cell) = .empty;
 
         for (table.children.items) |item| {
             // Render the table cell into a new buffer
@@ -589,7 +587,7 @@ pub const Formatter = struct {
             const output = try sub_renderer.format(root);
 
             const text = utils.trimTrailingWhitespace(utils.trimLeadingWhitespace(output));
-            try cells.append(.{ .text = text });
+            try cells.append(alloc, .{ .text = text });
         }
 
         // Demultiplex the rendered text for every cell into
@@ -682,7 +680,7 @@ pub const Formatter = struct {
         }
         const header_indent = Text{ .text = indent_buf[0 .. level + 1] };
 
-        self.leader_stack.append(header_indent) catch unreachable;
+        self.leader_stack.append(self.alloc, header_indent) catch unreachable;
 
         self.writeLeaders();
         self.needs_leaders = false;
@@ -706,7 +704,7 @@ pub const Formatter = struct {
     fn renderAlert(self: *Self, block: Leaf) !void {
         const alert = block.content.Alert.alert orelse "NOTE";
 
-        try self.leader_stack.append(quote_indent);
+        try self.leader_stack.append(self.alloc, quote_indent);
         if (!self.needs_leaders) {
             self.startStyle(quote_indent.style);
             self.write(quote_indent.text);

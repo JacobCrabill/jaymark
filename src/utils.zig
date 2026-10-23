@@ -788,7 +788,7 @@ pub fn htmlEncode(alloc: Allocator, bytes: []const u8) ![]const u8 {
         }
     }
 
-    var out: std.ArrayList(u8) = try .initCapacity(alloc, new_size);
+    var out = try std.ArrayList(u8).initCapacity(alloc, new_size);
 
     for (bytes) |c| {
         switch (c) {

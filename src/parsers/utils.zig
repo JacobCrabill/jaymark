@@ -8,7 +8,7 @@ const leaves = @import("../ast/leaves.zig");
 const inls = @import("../ast/inlines.zig");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 
 const TokenType = toks.TokenType;
 const Token = toks.Token;
@@ -407,10 +407,10 @@ test isGithubAlert {
 pub fn concatRawText(alloc: Allocator, tok_words: ArrayList(Token)) Allocator.Error![]const u8 {
     if (tok_words.items.len > 0) {
         // Extract *just* the text of each token into a new array
-        var words = ArrayList([]const u8).init(alloc);
-        defer words.deinit();
+        var words: ArrayList([]const u8) = .empty;
+        defer words.deinit(alloc);
         for (tok_words.items) |word| {
-            try words.append(word.text);
+            try words.append(alloc, word.text);
         }
 
         // Merge all words into a single string, merging consecutive whitespace
@@ -436,7 +436,7 @@ pub fn appendText(alloc: Allocator, text_parts: *ArrayList(Text), words: *ArrayL
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
         };
-        try text_parts.append(text);
+        try text_parts.append(alloc, text);
         words.clearRetainingCapacity();
     }
 }
@@ -444,11 +444,11 @@ pub fn appendText(alloc: Allocator, text_parts: *ArrayList(Text), words: *ArrayL
 /// Append a list of words to the given TextBlock as Text objects, preserving position information
 pub fn appendTextWithPos(alloc: Allocator, text_parts: *ArrayList(Text), tokens: []const Token, start: usize, end: usize, style: TextStyle) Allocator.Error!void {
     if (start < end and start < tokens.len) {
-        var words = ArrayList([]const u8).init(alloc);
-        defer words.deinit();
+        var words: ArrayList([]const u8) = .empty;
+        defer words.deinit(alloc);
 
         for (tokens[start..end]) |tok| {
-            try words.append(tok.text);
+            try words.append(alloc, tok.text);
         }
 
         // Merge all words into a single string, merging consecutive whitespace
@@ -464,7 +464,7 @@ pub fn appendTextWithPos(alloc: Allocator, text_parts: *ArrayList(Text), tokens:
             .line = tokens[start].src.row,
             .col = tokens[start].src.col,
         };
-        try text_parts.append(text);
+        try text_parts.append(alloc, text);
     }
 }
 
@@ -483,7 +483,7 @@ pub fn appendWords(alloc: Allocator, inlines: *ArrayList(Inline), words: *ArrayL
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
         };
-        try inlines.append(Inline.initWithContent(alloc, InlineData{ .text = text }));
+        try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
         words.clearRetainingCapacity();
     }
 }
@@ -491,11 +491,11 @@ pub fn appendWords(alloc: Allocator, inlines: *ArrayList(Inline), words: *ArrayL
 /// Append a list of tokens to the given inlines list as Inline Text objects, preserving position information
 pub fn appendWordsWithPos(alloc: Allocator, inlines: *ArrayList(Inline), tokens: []const Token, start: usize, end: usize, style: TextStyle) Allocator.Error!void {
     if (start < end and start < tokens.len) {
-        var words = ArrayList([]const u8).init(alloc);
-        defer words.deinit();
+        var words: ArrayList([]const u8) = .empty;
+        defer words.deinit(alloc);
 
         for (tokens[start..end]) |tok| {
-            try words.append(tok.text);
+            try words.append(alloc, tok.text);
         }
 
         // Merge all words into a single string
@@ -512,7 +512,7 @@ pub fn appendWordsWithPos(alloc: Allocator, inlines: *ArrayList(Inline), tokens:
             .line = tokens[start].src.row,
             .col = tokens[start].src.col,
         };
-        try inlines.append(Inline.initWithContent(alloc, InlineData{ .text = text }));
+        try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
     }
 }
 
@@ -525,7 +525,7 @@ pub fn appendSingleToken(alloc: Allocator, inlines: *ArrayList(Inline), token: T
         .line = token.src.row,
         .col = token.src.col,
     };
-    try inlines.append(Inline.initWithContent(alloc, InlineData{ .text = text }));
+    try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
 }
 
 /// Check if the token slice contains a valid link of the form: [text](url).
@@ -600,7 +600,7 @@ test validateLink {
     for (test_data) |data| {
         var lex = Lexer{};
         var tokens = try lex.tokenize(std.testing.allocator, data.link);
-        defer tokens.deinit();
+        defer tokens.deinit(std.testing.allocator);
 
         try std.testing.expectEqual(validateLink(tokens.items), data.valid);
     }

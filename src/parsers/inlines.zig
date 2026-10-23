@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 
 const debug = @import("../debug.zig");
 
@@ -126,7 +126,7 @@ pub const InlineParser = struct {
 
     /// Parse raw text content into inline content
     pub fn parseInlines(self: *Self, tokens: []const Token) !ArrayList(Inline) {
-        var inlines = ArrayList(Inline).init(self.alloc);
+        var inlines: ArrayList(Inline) = .empty;
         var style = TextStyle{};
         // TODO: make this 'scratch workspace' part of the Parser struct
         // to avoid constant re-init (use clearRetainingCapacity() instead of deinit())
@@ -205,11 +205,11 @@ pub const InlineParser = struct {
                         const code_end = end;
 
                         if (code_start < code_end) {
-                            var code_words = ArrayList([]const u8).init(self.alloc);
-                            defer code_words.deinit();
+                            var code_words: ArrayList([]const u8) = .empty;
+                            defer code_words.deinit(self.alloc);
 
                             for (tokens[code_start..code_end]) |ctok| {
-                                try code_words.append(ctok.text);
+                                try code_words.append(self.alloc, ctok.text);
                             }
 
                             // Merge all words into a single string
@@ -221,7 +221,7 @@ pub const InlineParser = struct {
                                 .alloc = self.alloc,
                                 .text = try self.alloc.dupe(u8, new_text_ws),
                             };
-                            try inlines.append(Inline.initWithContent(
+                            try inlines.append(self.alloc, Inline.initWithContent(
                                 self.alloc,
                                 inls.InlineData{ .codespan = codespan },
                             ));
@@ -239,11 +239,11 @@ pub const InlineParser = struct {
                         const link_end = end;
 
                         if (link_start < link_end) {
-                            var link_words = ArrayList([]const u8).init(self.alloc);
-                            defer link_words.deinit();
+                            var link_words: ArrayList([]const u8) = .empty;
+                            defer link_words.deinit(self.alloc);
 
                             for (tokens[link_start..link_end]) |ctok| {
-                                try link_words.append(ctok.text);
+                                try link_words.append(self.alloc, ctok.text);
                             }
 
                             // Merge all words into a single string
@@ -255,7 +255,7 @@ pub const InlineParser = struct {
                                 .url = try self.alloc.dupe(u8, new_text),
                                 .heap_url = true,
                             };
-                            try inlines.append(Inline.initWithContent(
+                            try inlines.append(self.alloc, Inline.initWithContent(
                                 self.alloc,
                                 inls.InlineData{ .autolink = autolink },
                             ));
@@ -274,7 +274,7 @@ pub const InlineParser = struct {
                     try utils.appendSingleToken(self.alloc, &inlines, space_token, style);
                 },
                 .ESCAPED => {
-                    try inlines.append(Inline.initWithContent(
+                    try inlines.append(self.alloc, Inline.initWithContent(
                         self.alloc,
                         inls.InlineData{ .escaped = tok.text[1] },
                     ));
@@ -423,10 +423,10 @@ pub const InlineParser = struct {
         }
 
         // Process URI text
-        var uri_words = ArrayList([]const u8).init(self.alloc);
-        defer uri_words.deinit();
+        var uri_words: ArrayList([]const u8) = .empty;
+        defer uri_words.deinit(self.alloc);
         for (uri_text) |tok| {
-            try uri_words.append(tok.text);
+            try uri_words.append(self.alloc, tok.text);
         }
 
         var inl: Inline = undefined;
@@ -465,7 +465,7 @@ pub const InlineParser = struct {
             link.text = link_text_block;
             inl = Inline.initWithContent(self.alloc, .{ .link = link });
         }
-        try inlines.append(inl);
+        try inlines.append(self.alloc, inl);
 
         return start + rp_idx + 1;
     }
@@ -482,13 +482,15 @@ const Lexer = @import("../lexer.zig").Lexer;
 fn parseInlinesFromStr(alloc: std.mem.Allocator, input: []const u8) !ArrayList(Inline) {
     var lex = Lexer{};
     var tokens = try lex.tokenize(alloc, input);
-    defer tokens.deinit();
+    defer tokens.deinit(alloc);
+
     // Strip the trailing EOF token before passing to the inline parser
     const tok_slice = if (tokens.items.len > 0 and tokens.items[tokens.items.len - 1].kind == .EOF)
         tokens.items[0 .. tokens.items.len - 1]
     else
         tokens.items;
     var parser = InlineParser.init(alloc, .{});
+
     return parser.parseInlines(tok_slice);
 }
 
@@ -497,7 +499,7 @@ test "lone tilde parses as literal text, not strikethrough" {
     var inlines = try parseInlinesFromStr(alloc, "~foo");
     defer {
         for (inlines.items) |*inl| inl.deinit();
-        inlines.deinit();
+        inlines.deinit(alloc);
     }
 
     // No inline should carry the strikethrough style
@@ -520,7 +522,7 @@ test "matched tildes produce strikethrough text" {
     var inlines = try parseInlinesFromStr(alloc, "~foo~");
     defer {
         for (inlines.items) |*inl| inl.deinit();
-        inlines.deinit();
+        inlines.deinit(alloc);
     }
 
     // The word "foo" must be struck
@@ -544,7 +546,7 @@ test "first tilde pair is strikethrough, trailing lone tilde is literal" {
     var inlines = try parseInlinesFromStr(alloc, "~foo~ ~bar");
     defer {
         for (inlines.items) |*inl| inl.deinit();
-        inlines.deinit();
+        inlines.deinit(alloc);
     }
 
     var foo_struck: bool = false;

@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
+const ArrayList = std.ArrayList;
 
 const debug = @import("../debug.zig");
 
@@ -200,7 +200,7 @@ pub const Parser = struct {
     lexer: Lexer,
     logger: Logger,
     text: ?[]const u8,
-    tokens: ArrayList(Token),
+    tokens: ArrayList(Token) = .empty,
     cursor: usize = 0,
     cur_token: Token,
     next_token: Token,
@@ -212,7 +212,6 @@ pub const Parser = struct {
             .alloc = alloc,
             .opts = opts,
             .lexer = Lexer{},
-            .tokens = ArrayList(Token).init(alloc),
             .logger = Logger{ .enabled = opts.verbose },
             .text = null,
             .cursor = 0,
@@ -239,7 +238,7 @@ pub const Parser = struct {
     /// Free any heap allocations
     pub fn deinit(self: *Self) void {
         self.reset();
-        self.tokens.deinit();
+        self.tokens.deinit(std.testing.allocator);
         self.document.deinit();
     }
 
@@ -405,7 +404,7 @@ pub const Parser = struct {
         // Child did not accept this line (or no children yet)
         // Determine which kind of Block this line should be
         const new_child = self.parseNewBlock(line) catch unreachable;
-        cblock.children.append(new_child) catch unreachable;
+        cblock.children.append(cblock.alloc, new_child) catch unreachable;
 
         return true;
     }
@@ -443,7 +442,7 @@ pub const Parser = struct {
         // Child did not accept this line (or no children yet)
         // Determine which kind of Block this line should be
         const child = self.parseNewBlock(trimmed_line) catch unreachable;
-        cblock.children.append(child) catch unreachable;
+        cblock.children.append(cblock.alloc, child) catch unreachable;
 
         return true;
     }
@@ -609,7 +608,7 @@ pub const Parser = struct {
                 // Empty list item - just create an empty paragraph child
                 var child = Block.initLeaf(self.alloc, .Paragraph, block.start_col());
                 child.close();
-                block.container().children.append(child) catch unreachable;
+                block.container().children.append(block.allocator(), child) catch unreachable;
                 block.close();
 
                 return true;
@@ -639,7 +638,7 @@ pub const Parser = struct {
         // Child did not accept this line (or no children yet)
         // Determine which kind of Block this line should be
         const child = self.parseNewBlock(content_line) catch unreachable;
-        cblock.children.append(child) catch unreachable;
+        cblock.children.append(cblock.alloc, child) catch unreachable;
 
         return true;
     }
@@ -742,7 +741,7 @@ pub const Parser = struct {
             } else if (i < trimmed_line.len) {
                 if (utils.indexOfTokenPos(trimmed_line, i, .PIPE)) |idx| {
                     const child = self.parseNewBlock(trimmed_line[i..idx]) catch unreachable;
-                    cblock.children.append(child) catch unreachable;
+                    cblock.children.append(cblock.alloc, child) catch unreachable;
                     i = idx - 1;
                 } else {
                     // No closing separator remains; any trailing '|' are literal (e.g. inside
@@ -802,7 +801,7 @@ pub const Parser = struct {
         }
         self.logger.log("  Line continues Alert\n", .{});
 
-        block.Leaf.raw_contents.appendSlice(tline) catch unreachable;
+        block.Leaf.raw_contents.appendSlice(block.allocator(), tline) catch unreachable;
 
         return true;
     }
@@ -865,7 +864,7 @@ pub const Parser = struct {
                 self.logger.log("Skipping token '{s}' in code block\n", .{tok.text});
                 continue;
             }
-            block.Leaf.raw_contents.append(tok) catch unreachable;
+            block.Leaf.raw_contents.append(block.allocator(), tok) catch unreachable;
         }
 
         if (have_closer)
@@ -892,7 +891,7 @@ pub const Parser = struct {
         head.level = level;
 
         const end: usize = utils.findFirstOf(trimmed_line, 0, &.{.BREAK}) orelse trimmed_line.len;
-        block.Leaf.raw_contents.appendSlice(trimmed_line[0..end]) catch unreachable;
+        block.Leaf.raw_contents.appendSlice(block.allocator(), trimmed_line[0..end]) catch unreachable;
         self.closeBlock(block);
 
         // Also get the raw contents as a single string
@@ -929,7 +928,7 @@ pub const Parser = struct {
         }
         self.logger.log("  Line continues paragraph\n", .{});
 
-        block.Leaf.raw_contents.appendSlice(line) catch unreachable;
+        block.Leaf.raw_contents.appendSlice(block.allocator(), line) catch unreachable;
 
         return true;
     }
@@ -1112,10 +1111,10 @@ pub const Parser = struct {
         }
 
         // TODO: Scratch space, scratch allocator in Parser struct
-        var words = ArrayList([]const u8).init(block.allocator());
-        defer words.deinit();
+        var words = ArrayList([]const u8).initCapacity(block.allocator(), block.Leaf.raw_contents.items.len) catch unreachable;
+        defer words.deinit(block.allocator());
         for (block.Leaf.raw_contents.items) |tok| {
-            words.append(tok.text) catch unreachable;
+            words.appendAssumeCapacity(tok.text);
         }
         code.text = std.mem.concat(block.allocator(), u8, words.items) catch unreachable;
     }

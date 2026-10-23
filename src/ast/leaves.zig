@@ -8,7 +8,6 @@ const debug = @import("../debug.zig");
 const inlines = @import("inlines.zig");
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.array_list.Managed;
 
 const Inline = inlines.Inline;
 const InlineType = inlines.InlineType;
