@@ -17,41 +17,41 @@ const Link = inlines.Link;
 
 /// All types of Leaf blocks that can be contained in Container blocks
 pub const LeafType = enum(u8) {
-    Alert,
-    Break,
-    Code,
-    // Directive,
-    Heading,
-    Paragraph,
-    // Reference,
+    alert,
+    linebreak,
+    code,
+    // directive,
+    heading,
+    paragraph,
+    // reference,
 };
 
 /// The type-specific content of a Leaf block
 pub const LeafData = union(LeafType) {
-    Alert: Alert,
-    Break: void,
-    Code: Code,
-    // Directive: Directive,
-    Heading: Heading,
-    Paragraph: void,
-    // Reference: Reference,
+    alert: Alert,
+    linebreak: void,
+    code: Code,
+    // directive: Directive,
+    heading: Heading,
+    paragraph: void,
+    // reference: Reference,
 
     pub fn deinit(self: *LeafData) void {
         switch (self.*) {
-            .Heading => |*h| h.deinit(),
-            .Code => |*c| c.deinit(),
-            // .Directive => |*d| d.deinit(),
-            .Alert => |*a| a.deinit(),
+            .heading => |*h| h.deinit(),
+            .code => |*c| c.deinit(),
+            // .directive => |*d| d.deinit(),
+            .alert => |*a| a.deinit(),
             inline else => {},
         }
     }
 
     pub fn print(self: LeafData, depth: u8) void {
         switch (self) {
-            .Heading => |h| h.print(depth),
-            .Code => |c| c.print(depth),
-            // .Directive => |d| d.print(depth),
-            .Alert => |a| a.print(depth),
+            .heading => |h| h.print(depth),
+            .code => |c| c.print(depth),
+            // .directive => |d| d.print(depth),
+            .alert => |a| a.print(depth),
             inline else => {},
         }
     }

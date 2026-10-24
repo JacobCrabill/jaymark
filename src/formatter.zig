@@ -366,19 +366,19 @@ pub const Formatter = struct {
             self.root = block;
         }
         switch (block) {
-            .Container => |c| try self.renderContainer(c),
-            .Leaf => |l| try self.renderLeaf(l),
+            .container => |c| try self.renderContainer(c),
+            .leaf => |l| try self.renderLeaf(l),
         }
     }
 
     /// Render a Container block
     pub fn renderContainer(self: *Self, block: Container) Error!void {
         switch (block.content) {
-            .Document => try self.renderDocument(block),
-            .Quote => try self.renderQuote(block),
-            .List => try self.renderList(block),
-            .ListItem => try self.renderListItem(block, 0),
-            .Table => try self.renderTable(block),
+            .document => try self.renderDocument(block),
+            .quote => try self.renderQuote(block),
+            .list => try self.renderList(block),
+            .list_item => try self.renderListItem(block, 0),
+            .table => try self.renderTable(block),
         }
     }
 
@@ -389,11 +389,11 @@ pub const Formatter = struct {
             self.needs_leaders = false;
         }
         switch (block.content) {
-            .Alert => try self.renderAlert(block),
-            .Break => {},
-            .Code => try self.renderCode(block),
-            .Heading => self.renderHeading(block),
-            .Paragraph => self.renderParagraph(block),
+            .alert => try self.renderAlert(block),
+            .linebreak => {},
+            .code => try self.renderCode(block),
+            .heading => self.renderHeading(block),
+            .paragraph => self.renderParagraph(block),
         }
     }
 
@@ -437,7 +437,7 @@ pub const Formatter = struct {
 
     /// Render a List of Items (may be ordered or unordered)
     fn renderList(self: *Self, list: Container) Error!void {
-        switch (list.content.List.kind) {
+        switch (list.content.list.kind) {
             .ordered => try self.renderNumberedList(list),
             .unordered => try self.renderUnorderedList(list),
             .task => try self.renderTaskList(list),
@@ -453,7 +453,7 @@ pub const Formatter = struct {
 
             // For all but the first item, handle the extra line spacing between items
             if (i > 0) {
-                for (0..list.content.List.spacing) |_| {
+                for (0..list.content.list.spacing) |_| {
                     self.renderBreak();
                 }
             }
@@ -467,13 +467,13 @@ pub const Formatter = struct {
             self.needs_leaders = false;
             try self.leader_stack.append(self.alloc, list_indent);
             defer _ = self.leader_stack.pop();
-            try self.renderListItem(item.Container, list.content.List.spacing);
+            try self.renderListItem(item.container, list.content.list.spacing);
         }
     }
 
     /// Render an ordered (numbered) list of items
     fn renderNumberedList(self: *Self, list: Container) Error!void {
-        const start: usize = list.content.List.start;
+        const start: usize = list.content.list.start;
         var buffer: [16]u8 = undefined;
         for (list.children.items, 0..) |item, i| {
             // Ensure we start each list item on a new line
@@ -482,7 +482,7 @@ pub const Formatter = struct {
 
             // For all but the first item, handle the extra line spacing between items
             if (i > 0) {
-                for (0..list.content.List.spacing) |_| {
+                for (0..list.content.list.spacing) |_| {
                     self.renderBreak();
                 }
             }
@@ -507,7 +507,7 @@ pub const Formatter = struct {
             }
             defer _ = self.leader_stack.pop();
 
-            try self.renderListItem(item.Container, list.content.List.spacing);
+            try self.renderListItem(item.container, list.content.list.spacing);
         }
     }
 
@@ -520,13 +520,13 @@ pub const Formatter = struct {
 
             // For all but the first item, handle the extra line spacing between items
             if (i > 0) {
-                for (0..list.content.List.spacing) |_| {
+                for (0..list.content.list.spacing) |_| {
                     self.renderBreak();
                 }
             }
 
             self.writeLeaders();
-            if (item.Container.content.ListItem.checked) {
+            if (item.container.content.list_item.checked) {
                 self.write("- [x] ");
             } else {
                 self.write("- [ ] ");
@@ -538,7 +538,7 @@ pub const Formatter = struct {
             self.needs_leaders = false;
             try self.leader_stack.append(self.alloc, task_list_indent);
             defer _ = self.leader_stack.pop();
-            try self.renderListItem(item.Container, list.content.List.spacing);
+            try self.renderListItem(item.container, list.content.list.spacing);
         }
     }
 
@@ -559,7 +559,7 @@ pub const Formatter = struct {
         if (self.column > self.opts.indent)
             self.renderBreak();
 
-        const ncol = table.content.Table.ncol;
+        const ncol = table.content.table.ncol;
 
         // Create a new renderer to render into a buffer for each cell
         // Use an arena to simplify memory management here
@@ -580,7 +580,7 @@ pub const Formatter = struct {
             };
 
             // Create a new Document with our single item
-            var root: Block = .initContainer(alloc, .Document, 0);
+            var root: Block = .initContainer(alloc, .document, 0);
             try root.addChild(item);
 
             var sub_renderer: Formatter = .init(self.io, alloc, sub_opts);
@@ -668,7 +668,7 @@ pub const Formatter = struct {
 
     /// Render an ATX Heading
     fn renderHeading(self: *Self, leaf: Leaf) void {
-        const h: leaves.Heading = leaf.content.Heading;
+        const h: leaves.Heading = leaf.content.heading;
 
         // Setup the header tags as leaders in the case we have
         // a very long header that needs to be wrapped
@@ -702,7 +702,7 @@ pub const Formatter = struct {
 
     /// Render an Alert block
     fn renderAlert(self: *Self, block: Leaf) !void {
-        const alert = block.content.Alert.alert orelse "NOTE";
+        const alert = block.content.alert.alert orelse "NOTE";
 
         try self.leader_stack.append(self.alloc, quote_indent);
         if (!self.needs_leaders) {
@@ -733,7 +733,7 @@ pub const Formatter = struct {
 
     /// Render a raw block of code
     fn renderCode(self: *Self, block: Leaf) !void {
-        const c = block.content.Code;
+        const c = block.content.code;
         const dir: []const u8 = c.directive orelse "";
         const tag = c.tag orelse dir;
         const fence = c.opener orelse "```";

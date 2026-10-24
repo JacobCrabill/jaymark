@@ -157,7 +157,7 @@ pub const Logger = struct {
         if (indent) self.doIndent();
         self.raw("\"", .{});
         for (tokens) |tok| {
-            if (tok.kind == .BREAK) {
+            if (tok.kind == .newline) {
                 self.raw("\\n", .{});
                 continue;
             }

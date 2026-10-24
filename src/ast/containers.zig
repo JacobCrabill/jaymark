@@ -4,19 +4,19 @@ const std = @import("std");
 
 /// Containers are Blocks which contain other Blocks
 pub const ContainerType = enum(u8) {
-    Document, // The Document is the root container
-    Quote,
-    List, // Can only contain ListItems
-    ListItem, // Can only be contained by a List
-    Table, // Can only be contained by a Document; Can only contain Paragraphs
+    document, // The Document is the root container
+    quote,
+    list, // Can only contain ListItems
+    list_item, // Can only be contained by a List
+    table, // Can only be contained by a Document; Can only contain Paragraphs
 };
 
 pub const ContainerData = union(ContainerType) {
-    Document: void,
-    Quote: void,
-    List: List,
-    ListItem: ListItem,
-    Table: Table,
+    document: void,
+    quote: void,
+    list: List,
+    list_item: ListItem,
+    table: Table,
 };
 
 /// List blocks contain only ListItems

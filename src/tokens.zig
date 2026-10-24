@@ -8,14 +8,14 @@ const debug = @import("debug.zig");
 
 // zig fmt: off
 pub const TokenType = enum {
-    EOF, WORD, DIGIT, INDENT, SPACE, BREAK,
-    HASH, DIRECTIVE, CODE_INLINE,
-    PLUS, MINUS, STAR, DOLLAR, USCORE, COLON,
-    TILDE, PERIOD, COMMA, EQUAL, BANG, QUERY, AT,
-    PERCENT, CARET, AND, LT, GT,
-    LPAREN, RPAREN, LBRACK, RBRACK, LCURLY, RCURLY,
-    SLASH, BSLASH, PIPE, BOLD, EMBOLD,
-    ESCAPED, UNKNOWN,
+    eof, word, digit, indent, space, newline,
+    hash, directive, code_inline,
+    plus, minus, star, dollar, uscore, colon,
+    tilde, period, comma, equal, bang, query, at,
+    percent, caret, ampersand, lt, gt,
+    lparen, rparen, lbrack, rbrack, lcurly, rcurly,
+    slash, bslash, pipe, bold, embold,
+    escaped, unknown,
 };
 // zig fmt: on
 
@@ -25,22 +25,22 @@ pub const SourceLocation = struct {
 };
 
 pub const Token = struct {
-    kind: TokenType = TokenType.EOF,
+    kind: TokenType = TokenType.eof,
     text: []const u8 = undefined,
     src: SourceLocation = undefined,
 };
 
 pub const TokenList = ArrayList(Token);
 
-pub const Eof = Token{ .kind = .EOF, .text = "" };
+pub const Eof = Token{ .kind = .eof, .text = "" };
 
 /// For future use with parsing obscure syntax in links
 const Precedence = enum(u8) {
-    LOWEST,
-    EMPHASIS,
-    BRACKET,
-    TICK,
-    BSLASH,
+    lowest,
+    emphasis,
+    bracket,
+    tick,
+    bslash,
 };
 
 /// Generic parser for a multi-character token from a list of possible characters
@@ -117,7 +117,7 @@ pub const WordTokenizer = struct {
 
         if (end > 0) {
             return Token{
-                .kind = TokenType.WORD,
+                .kind = TokenType.word,
                 .text = text[0..end],
             };
         }
@@ -140,7 +140,7 @@ pub const DirectiveTokenizer = struct {
         // We only match 3 or more '`' characters
         if (end > 2) {
             return Token{
-                .kind = TokenType.DIRECTIVE,
+                .kind = TokenType.directive,
                 .text = text[0..end],
             };
         }
@@ -159,7 +159,7 @@ pub const EscapeTokenizer = struct {
         const next = text[1];
         if (!utils.isPunctuation(next)) return null;
         return Token{
-            .kind = .ESCAPED,
+            .kind = .escaped,
             .text = text[0..2],
         };
     }
@@ -182,50 +182,50 @@ pub const Utf8Tokenizer = struct {
 /// Collect all available tokenizers
 pub const Tokenizers = .{
     Utf8Tokenizer,
-    LiteralTokenizer("\r\n", TokenType.BREAK),
-    LiteralTokenizer("\n", TokenType.BREAK),
-    LiteralTokenizer("\t", TokenType.INDENT),
-    LiteralTokenizer("***", TokenType.EMBOLD),
-    LiteralTokenizer("_**", TokenType.EMBOLD),
-    LiteralTokenizer("**_", TokenType.EMBOLD),
-    LiteralTokenizer("*__", TokenType.EMBOLD),
-    LiteralTokenizer("__*", TokenType.EMBOLD),
-    LiteralTokenizer("___", TokenType.EMBOLD),
-    LiteralTokenizer("**", TokenType.BOLD),
-    LiteralTokenizer("__", TokenType.BOLD),
+    LiteralTokenizer("\r\n", TokenType.newline),
+    LiteralTokenizer("\n", TokenType.newline),
+    LiteralTokenizer("\t", TokenType.indent),
+    LiteralTokenizer("***", TokenType.embold),
+    LiteralTokenizer("_**", TokenType.embold),
+    LiteralTokenizer("**_", TokenType.embold),
+    LiteralTokenizer("*__", TokenType.embold),
+    LiteralTokenizer("__*", TokenType.embold),
+    LiteralTokenizer("___", TokenType.embold),
+    LiteralTokenizer("**", TokenType.bold),
+    LiteralTokenizer("__", TokenType.bold),
     DirectiveTokenizer,
-    SingularTokenizer('`', TokenType.CODE_INLINE),
-    SingularTokenizer(' ', TokenType.SPACE),
-    SingularTokenizer('#', TokenType.HASH),
-    SingularTokenizer('*', TokenType.STAR),
-    SingularTokenizer('_', TokenType.USCORE),
-    SingularTokenizer('~', TokenType.TILDE),
-    SingularTokenizer('+', TokenType.PLUS),
-    SingularTokenizer('-', TokenType.MINUS),
-    SingularTokenizer('<', TokenType.LT),
-    SingularTokenizer('>', TokenType.GT),
-    SingularTokenizer('.', TokenType.PERIOD),
-    SingularTokenizer(',', TokenType.COMMA),
-    SingularTokenizer('=', TokenType.EQUAL),
-    SingularTokenizer('!', TokenType.BANG),
-    SingularTokenizer('?', TokenType.QUERY),
-    SingularTokenizer('@', TokenType.AT),
-    SingularTokenizer('$', TokenType.DOLLAR),
-    SingularTokenizer('%', TokenType.PERCENT),
-    SingularTokenizer('^', TokenType.CARET),
-    SingularTokenizer('&', TokenType.AND),
-    SingularTokenizer('(', TokenType.LPAREN),
-    SingularTokenizer(')', TokenType.RPAREN),
-    SingularTokenizer('[', TokenType.LBRACK),
-    SingularTokenizer(']', TokenType.RBRACK),
-    SingularTokenizer('{', TokenType.LCURLY),
-    SingularTokenizer('}', TokenType.RCURLY),
-    SingularTokenizer('/', TokenType.SLASH),
+    SingularTokenizer('`', TokenType.code_inline),
+    SingularTokenizer(' ', TokenType.space),
+    SingularTokenizer('#', TokenType.hash),
+    SingularTokenizer('*', TokenType.star),
+    SingularTokenizer('_', TokenType.uscore),
+    SingularTokenizer('~', TokenType.tilde),
+    SingularTokenizer('+', TokenType.plus),
+    SingularTokenizer('-', TokenType.minus),
+    SingularTokenizer('<', TokenType.lt),
+    SingularTokenizer('>', TokenType.gt),
+    SingularTokenizer('.', TokenType.period),
+    SingularTokenizer(',', TokenType.comma),
+    SingularTokenizer('=', TokenType.equal),
+    SingularTokenizer('!', TokenType.bang),
+    SingularTokenizer('?', TokenType.query),
+    SingularTokenizer('@', TokenType.at),
+    SingularTokenizer('$', TokenType.dollar),
+    SingularTokenizer('%', TokenType.percent),
+    SingularTokenizer('^', TokenType.caret),
+    SingularTokenizer('&', TokenType.ampersand),
+    SingularTokenizer('(', TokenType.lparen),
+    SingularTokenizer(')', TokenType.rparen),
+    SingularTokenizer('[', TokenType.lbrack),
+    SingularTokenizer(']', TokenType.rbrack),
+    SingularTokenizer('{', TokenType.lcurly),
+    SingularTokenizer('}', TokenType.rcurly),
+    SingularTokenizer('/', TokenType.slash),
     EscapeTokenizer,
-    SingularTokenizer('\\', TokenType.BSLASH),
-    SingularTokenizer('|', TokenType.PIPE),
-    SingularTokenizer(':', TokenType.COLON),
-    AnyOfTokenizer("0123456789", TokenType.DIGIT),
+    SingularTokenizer('\\', TokenType.bslash),
+    SingularTokenizer('|', TokenType.pipe),
+    SingularTokenizer(':', TokenType.colon),
+    AnyOfTokenizer("0123456789", TokenType.digit),
     WordTokenizer,
 };
 
@@ -243,7 +243,7 @@ pub fn printTypes(tokens: []const Token) void {
 pub fn printText(tokens: []const Token) void {
     debug.print("\"", .{});
     for (tokens) |tok| {
-        if (tok.kind == .BREAK) {
+        if (tok.kind == .newline) {
             debug.print("\\n", .{});
             continue;
         }
@@ -268,16 +268,16 @@ pub fn concatWords(alloc: Allocator, tokens: []const Token) ![]const u8 {
 // Tests
 ///////////////////////////////////////////////////////////////////////////////
 
-test "EscapeTokenizer: backslash-pipe produces ESCAPED token" {
+test "EscapeTokenizer: backslash-pipe produces escaped token" {
     const tok = EscapeTokenizer.peek("\\|rest").?;
-    try std.testing.expectEqual(TokenType.ESCAPED, tok.kind);
+    try std.testing.expectEqual(TokenType.escaped, tok.kind);
     try std.testing.expectEqualStrings("\\|", tok.text);
 }
 
-test "EscapeTokenizer: lone backslash does not produce ESCAPED token" {
+test "EscapeTokenizer: lone backslash does not produce escaped token" {
     try std.testing.expect(EscapeTokenizer.peek("\\") == null);
 }
 
-test "EscapeTokenizer: backslash-letter does not produce ESCAPED token" {
+test "EscapeTokenizer: backslash-letter does not produce escaped token" {
     try std.testing.expect(EscapeTokenizer.peek("\\n") == null);
 }

@@ -28,8 +28,8 @@ const Link = inls.Link;
 
 /// Generic Block type. The AST is contructed from this type.
 pub const BlockType = enum(u8) {
-    Container,
-    Leaf,
+    container,
+    leaf,
 };
 
 /// A Block may be a Container or a Leaf.
@@ -40,17 +40,17 @@ pub const Block = union(BlockType) {
         NotALeaf,
         NotAContainer,
     };
-    Container: Container,
-    Leaf: Leaf,
+    container: Container,
+    leaf: Leaf,
 
     /// Create a new Container of the given type
     pub fn initContainer(alloc: Allocator, kind: ContainerType, col: usize) Block {
-        return .{ .Container = Container.init(alloc, kind, col) };
+        return .{ .container = Container.init(alloc, kind, col) };
     }
 
     /// Create a new Leaf of the given type
     pub fn initLeaf(alloc: Allocator, kind: LeafType, col: usize) Block {
-        return .{ .Leaf = Leaf.init(alloc, kind, col) };
+        return .{ .leaf = Leaf.init(alloc, kind, col) };
     }
 
     pub fn deinit(self: *Block) void {
@@ -72,20 +72,20 @@ pub const Block = union(BlockType) {
     }
 
     pub fn isContainer(self: Block) bool {
-        return self == .Container;
+        return self == .container;
     }
 
     pub fn isLeaf(self: Block) bool {
-        return self == .Leaf;
+        return self == .leaf;
     }
 
-    pub fn container(self: *Self) *Container {
-        return &self.Container;
-    }
+    // pub fn container(self: *Self) *Container {
+    //     return &self.container;
+    // }
 
-    pub fn leaf(self: *Self) *Leaf {
-        return &self.Leaf;
-    }
+    // pub fn leaf(self: *Self) *Leaf {
+    //     return &self.Leaf;
+    // }
 
     pub fn isOpen(self: Self) bool {
         return switch (self) {
@@ -101,22 +101,22 @@ pub const Block = union(BlockType) {
 
     pub fn addChild(self: *Self, child: Block) !void {
         switch (self.*) {
-            .Leaf => return error.NotAContainer,
-            .Container => |*c| try c.addChild(child),
+            .leaf => return error.NotAContainer,
+            .container => |*c| try c.addChild(child),
         }
     }
 
     pub fn lastChild(self: *Self) ?*Block {
         switch (self.*) {
-            .Leaf => return null,
-            .Container => |*c| return c.lastChild(),
+            .leaf => return null,
+            .container => |*c| return c.lastChild(),
         }
     }
 
     pub fn addInline(self: *Self, item: Inline) !void {
         switch (self.*) {
-            .Container => return error.NotALeaf,
-            .Leaf => |*c| try c.addInline(item),
+            .container => return error.NotALeaf,
+            .leaf => |*c| try c.addInline(item),
         }
     }
 
@@ -150,11 +150,11 @@ pub const Container = struct {
         };
 
         block.content = switch (kind) {
-            .Document => ContainerData{ .Document = {} },
-            .Quote => ContainerData{ .Quote = {} },
-            .List => ContainerData{ .List = containers.List{} },
-            .ListItem => ContainerData{ .ListItem = containers.ListItem{} },
-            .Table => ContainerData{ .Table = containers.Table{ .gpa = alloc } },
+            .document => ContainerData{ .document = {} },
+            .quote => ContainerData{ .quote = {} },
+            .list => ContainerData{ .list = containers.List{} },
+            .list_item => ContainerData{ .list_item = containers.ListItem{} },
+            .table => ContainerData{ .table = containers.Table{ .gpa = alloc } },
         };
 
         return block;
@@ -167,7 +167,7 @@ pub const Container = struct {
         self.children.deinit(self.alloc);
 
         switch (self.content) {
-            .Table => |*t| {
+            .table => |*t| {
                 t.relative_width.deinit(t.gpa);
                 t.alignment.deinit(t.gpa);
             },
@@ -205,11 +205,11 @@ pub const Container = struct {
         });
 
         switch (self.content) {
-            .List => |l| {
+            .list => |l| {
                 debug.printIndent(depth + 1);
                 debug.print("List Spacing: {d}\n", .{l.spacing});
             },
-            .Table => |t| {
+            .table => |t| {
                 debug.printIndent(depth + 1);
                 debug.print("Table: Column alignment:", .{});
                 for (t.alignment.items) |a| {
@@ -251,11 +251,11 @@ pub const Leaf = struct {
             .start_col = col,
             .content = blk: {
                 switch (kind) {
-                    .Alert => break :blk .{ .Alert = leaves.Alert.init(alloc) },
-                    .Break => break :blk .{ .Break = {} },
-                    .Code => break :blk .{ .Code = leaves.Code.init(alloc) },
-                    .Heading => break :blk .{ .Heading = leaves.Heading.init(alloc) },
-                    .Paragraph => break :blk .{ .Paragraph = {} },
+                    .alert => break :blk .{ .alert = leaves.Alert.init(alloc) },
+                    .linebreak => break :blk .{ .linebreak = {} },
+                    .code => break :blk .{ .code = leaves.Code.init(alloc) },
+                    .heading => break :blk .{ .heading = leaves.Heading.init(alloc) },
+                    .paragraph => break :blk .{ .paragraph = {} },
                 }
             },
         };
@@ -324,7 +324,7 @@ pub const Leaf = struct {
 
 pub fn isBreak(block: Block) bool {
     if (!block.isLeaf()) return false;
-    return block.Leaf.content == LeafType.Break;
+    return block.leaf.content == LeafType.linebreak;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -362,38 +362,22 @@ pub fn isBreak(block: Block) bool {
 // ----------------------------------------------------------------------------
 
 ///////////////////////////////////////////////////////////////////////////////
-// Helper Functions
-///////////////////////////////////////////////////////////////////////////////
-
-pub fn printAST(block: Block) void {
-    block.print(0);
-}
-
-pub fn isContainer(block: Block) bool {
-    return block == .Container;
-}
-
-pub fn isLeaf(block: Block) bool {
-    return block == .Leaf;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // Tests
 ///////////////////////////////////////////////////////////////////////////////
 
 /// Manually create a useful Markdown document AST
 fn createTestAst(alloc: Allocator) !Block {
     // Create the Document root
-    var root = Block.initContainer(alloc, .Document, 0);
+    var root = Block.initContainer(alloc, .document, 0);
 
     // Create a List container
-    var list = Block.initContainer(alloc, .List, 0);
+    var list = Block.initContainer(alloc, .list, 0);
 
     // Create a ListItem
-    var list_item = Block.initContainer(alloc, .ListItem, 2);
+    var list_item = Block.initContainer(alloc, .list_item, 2);
 
     // Create a Paragraph
-    var paragraph = Block.initLeaf(alloc, .Paragraph, 4);
+    var paragraph = Block.initLeaf(alloc, .paragraph, 4);
 
     // Create some Text
     const text1 = Text{ .text = "Hello, " };
@@ -408,18 +392,18 @@ fn createTestAst(alloc: Allocator) !Block {
     try link.text.append(alloc, Text{ .text = "Google", .style = .{ .underline = true } });
 
     // Add the Text and the Link to the Paragraph
-    try std.testing.expect(isLeaf(paragraph));
-    try paragraph.Leaf.addText(text1);
-    try paragraph.Leaf.addText(text2);
-    try paragraph.Leaf.addText(text3);
-    try paragraph.Leaf.addLink(link);
+    try std.testing.expect(paragraph.isLeaf());
+    try paragraph.leaf.addText(text1);
+    try paragraph.leaf.addText(text2);
+    try paragraph.leaf.addText(text3);
+    try paragraph.leaf.addLink(link);
 
     // Add the Paragraph to the ListItem
-    try std.testing.expect(isContainer(list_item));
+    try std.testing.expect(list_item.isContainer());
     try list_item.addChild(paragraph);
 
     // Add the ListItem to the List
-    try std.testing.expect(isContainer(list));
+    try std.testing.expect(list.isContainer());
     try list.addChild(list_item);
 
     // Add the List to the Document
@@ -427,16 +411,16 @@ fn createTestAst(alloc: Allocator) !Block {
 
     // Try craeting a Table with 2 cols and 1 row
     // Create another Paragraph
-    var table = Block.initContainer(alloc, .Table, 0);
-    table.Container.content.Table.ncol = 2;
+    var table = Block.initContainer(alloc, .table, 0);
+    table.container.content.table.ncol = 2;
 
-    var para2 = Block.initLeaf(alloc, .Paragraph, 4);
+    var para2 = Block.initLeaf(alloc, .paragraph, 4);
     const text4 = Text{ .text = "Hello, " };
-    try para2.Leaf.addText(text4);
+    try para2.leaf.addText(text4);
 
-    var para3 = Block.initLeaf(alloc, .Paragraph, 4);
+    var para3 = Block.initLeaf(alloc, .paragraph, 4);
     const text5 = Text{ .text = "World" };
-    try para3.Leaf.addText(text5);
+    try para3.leaf.addText(text5);
 
     try table.addChild(para2);
     try table.addChild(para3);
@@ -470,24 +454,24 @@ test "Print basic AST" {
 
     const expected =
         \\Print basic AST result:
-        \\│ Container: open: true, type: Document with 2 children
-        \\│ │ Container: open: true, type: List with 1 children
+        \\│ Container: open: true, type: document with 2 children
+        \\│ │ Container: open: true, type: list with 1 children
         \\│ │ │ List Spacing: 0
-        \\│ │ │ Container: open: true, type: ListItem with 1 children
-        \\│ │ │ │ Leaf: open: true, type: Paragraph
+        \\│ │ │ Container: open: true, type: list_item with 1 children
+        \\│ │ │ │ Leaf: open: true, type: paragraph
         \\│ │ │ │ │ Inline content:
         \\│ │ │ │ │ │ Text: 'Hello, ' [line: 0, col: 0]
         \\│ │ │ │ │ │ Text: 'World' [line: 0, col: 0]
         \\│ │ │ │ │ │ Text: '!' [line: 0, col: 0]
         \\│ │ │ │ │ │ Link:
         \\│ │ │ │ │ │ │ Text: 'Google' [line: 0, col: 0]
-        \\│ │ Container: open: true, type: Table with 2 children
+        \\│ │ Container: open: true, type: table with 2 children
         \\│ │ │ Table: Column alignment:
         \\│ │ │ Table: Relative column widths:
-        \\│ │ │ Leaf: open: true, type: Paragraph
+        \\│ │ │ Leaf: open: true, type: paragraph
         \\│ │ │ │ Inline content:
         \\│ │ │ │ │ Text: 'Hello, ' [line: 0, col: 0]
-        \\│ │ │ Leaf: open: true, type: Paragraph
+        \\│ │ │ Leaf: open: true, type: paragraph
         \\│ │ │ │ Inline content:
         \\│ │ │ │ │ Text: 'World' [line: 0, col: 0]
         \\

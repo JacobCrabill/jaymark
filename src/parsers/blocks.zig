@@ -52,9 +52,9 @@ fn isContinuationLineQuote(line: []const Token) bool {
     // it can also be a part of the Quote block
     for (line) |tok| {
         switch (tok.kind) {
-            .SPACE => {},
-            .INDENT => {},
-            .GT => return true,
+            .space => {},
+            .indent => {},
+            .gt => return true,
             else => return false,
         }
     }
@@ -102,7 +102,7 @@ fn trimContinuationMarkersQuote(line: []const Token) []const Token {
     // Turn '  > Foo' into 'Foo'
     const trimmed = utils.trimLeadingWhitespace(line);
     assert(trimmed.len > 0);
-    assert(trimmed[0].kind == .GT);
+    assert(trimmed[0].kind == .gt);
     return utils.trimLeadingWhitespace(trimmed[1..]);
 }
 
@@ -123,7 +123,7 @@ fn trimContinuationMarkersUnorderedList(line: []const Token) []const Token {
     assert(trimmed.len > 0);
 
     switch (trimmed[0].kind) {
-        .MINUS, .PLUS, .STAR => {
+        .minus, .plus, .star => {
             return utils.trimLeadingWhitespace(trimmed[1..]);
         },
         else => {
@@ -140,10 +140,10 @@ fn trimContinuationMarkersOrderedList(line: []const Token) []const Token {
     var have_dot: bool = false;
     for (trimmed, 0..) |tok, i| {
         switch (tok.kind) {
-            .DIGIT => {},
-            .PERIOD => {
+            .digit => {},
+            .period => {
                 have_dot = true;
-                assert(trimmed[1].kind == .PERIOD);
+                assert(trimmed[1].kind == .period);
                 return utils.trimLeadingWhitespace(trimmed[2..]);
             },
             else => {
@@ -166,7 +166,7 @@ fn trimContinuationMarkersTaskList(line: []const Token) []const Token {
 
 fn trimContinuationMarkersTable(line: []const Token) []const Token {
     for (line, 0..) |tok, i| {
-        if (tok.kind == .PIPE and i + 1 < line.len) return line[i + 1 ..];
+        if (tok.kind == .pipe and i + 1 < line.len) return line[i + 1 ..];
     }
     @panic("Can't be here!");
 }
@@ -177,7 +177,7 @@ fn parseOneInline(alloc: Allocator, tokens: []const Token) ?inls.Inline {
     for (tokens, 0..) |tok, i| {
         _ = i;
         switch (tok.kind) {
-            .WORD => {
+            .word => {
                 // todo: parse (concatenate) all following words until a change
                 // For now, just take the lazy approach
                 return inls.Inline.initWithContent(alloc, .{ .text = inls.Text{ .text = tok.text } });
@@ -218,7 +218,7 @@ pub const Parser = struct {
             .cur_token = undefined,
             .next_token = undefined,
             .cur_line = undefined,
-            .document = Block.initContainer(alloc, .Document, 0),
+            .document = Block.initContainer(alloc, .document, 0),
         };
     }
 
@@ -232,7 +232,7 @@ pub const Parser = struct {
         }
         self.tokens.clearRetainingCapacity();
         self.document.deinit();
-        self.document = Block.initContainer(self.alloc, .Document, 0);
+        self.document = Block.initContainer(self.alloc, .document, 0);
     }
 
     /// Free any heap allocations
@@ -264,7 +264,7 @@ pub const Parser = struct {
             self.cur_line = line;
 
             // Handle special case: Very last line being EOF
-            if (line.len == 1 and line[0].kind == .EOF)
+            if (line.len == 1 and line[0].kind == .eof)
                 break :loop;
 
             // We allow some "wiggle room" in the leading whitespace, up to 2 spaces
@@ -283,7 +283,7 @@ pub const Parser = struct {
     /// Resets the Parser's Document to an empty block.
     pub fn toOwnedDocument(self: *Self) !Block {
         const doc = self.document;
-        self.document = Block.initContainer(self.alloc, .Document, 0);
+        self.document = Block.initContainer(self.alloc, .document, 0);
         return doc;
     }
 
@@ -341,7 +341,7 @@ pub const Parser = struct {
             return self.tokens.items.len;
 
         for (self.tokens.items[idx..], idx..) |tok, i| {
-            if (tok.kind == .BREAK)
+            if (tok.kind == .newline)
                 return i;
         }
 
@@ -362,22 +362,22 @@ pub const Parser = struct {
     /// Parse one line of Markdown using the given Block
     fn handleLine(self: *Self, block: *Block, line: []const Token) bool {
         switch (block.*) {
-            .Container => |c| {
+            .container => |c| {
                 switch (c.content) {
-                    .Document => return self.handleLineDocument(block, line),
-                    .Quote => return self.handleLineQuote(block, line),
-                    .List => return self.handleLineList(block, line),
-                    .ListItem => return self.handleLineListItem(block, line),
-                    .Table => return self.handleLineTable(block, line),
+                    .document => return self.handleLineDocument(block, line),
+                    .quote => return self.handleLineQuote(block, line),
+                    .list => return self.handleLineList(block, line),
+                    .list_item => return self.handleLineListItem(block, line),
+                    .table => return self.handleLineTable(block, line),
                 }
             },
-            .Leaf => |l| {
+            .leaf => |l| {
                 switch (l.content) {
-                    .Alert => return self.handleLineAlert(block, line),
-                    .Break => return self.handleLineBreak(block, line),
-                    .Code => return self.handleLineCode(block, line),
-                    .Heading => return self.handleLineHeading(block, line),
-                    .Paragraph => return self.handleLineParagraph(block, line),
+                    .alert => return self.handleLineAlert(block, line),
+                    .linebreak => return self.handleLineBreak(block, line),
+                    .code => return self.handleLineCode(block, line),
+                    .heading => return self.handleLineHeading(block, line),
+                    .paragraph => return self.handleLineParagraph(block, line),
                 }
             },
         }
@@ -389,7 +389,7 @@ pub const Parser = struct {
         assert(block.isContainer());
 
         // Check for an open child
-        var cblock = block.container();
+        var cblock = &block.container;
         if (cblock.children.items.len > 0) {
             const child: *Block = &cblock.children.items[cblock.children.items.len - 1];
             if (child.isOpen()) {
@@ -418,7 +418,7 @@ pub const Parser = struct {
         self.logger.log("Handling Quote: ", .{});
         self.logger.printText(line, false);
 
-        var cblock = &block.Container;
+        var cblock = &block.container;
 
         var trimmed_line = line;
         if (isContinuationLineQuote(line)) {
@@ -454,30 +454,30 @@ pub const Parser = struct {
         self.logger.depth += 1;
         defer self.logger.depth -= 1;
 
-        var cblock = block.container();
+        var cblock = &block.container;
 
         const is_break: bool = utils.isEmptyLine(line);
         const is_list_item: bool = utils.isListItem(line);
         if (is_break) {
             // We allow spacing between each list item, so keep track of how many blank lines are between each item.
-            cblock.content.List._current_break_count +|= 1;
+            cblock.content.list._current_break_count +|= 1;
 
             // NOTE: Only the gap between the 1st and 2nd items is used to set the spacing;
             // the inter-item gaps after the 2nd item MUST be less than the gap between the 1st and 2nd items.
             if (cblock.children.items.len == 1) {
-                cblock.content.List.spacing +|= 1;
+                cblock.content.list.spacing +|= 1;
                 return true;
             } else if (cblock.children.items.len > 1) {
-                const expected_spacing: u8 = cblock.content.List.spacing;
+                const expected_spacing: u8 = cblock.content.list.spacing;
                 // We end the current list if the current line spacing between items is greater than
                 // that between the first and second list items
-                const current_spacing: u8 = cblock.content.List._current_break_count;
+                const current_spacing: u8 = cblock.content.list._current_break_count;
                 if (current_spacing > expected_spacing) {
                     self.closeBlock(block);
                     return false;
                 }
             }
-        } else if (cblock.content.List._current_break_count > 0 and !is_list_item) {
+        } else if (cblock.content.list._current_break_count > 0 and !is_list_item) {
             // If we just had a blank line in between list items, the next non-blank line
             // may still belong to the current list item if it is indented as child content.
             const start_col = utils.findStartColumn(line);
@@ -498,10 +498,10 @@ pub const Parser = struct {
                 }
             }
 
-            cblock.content.List._current_break_count = 0;
+            cblock.content.list._current_break_count = 0;
         } else {
             // reset for the next ListItem
-            cblock.content.List._current_break_count = 0;
+            cblock.content.list._current_break_count = 0;
         }
 
         if (!(isLazyContinuationLineList(line) or utils.findStartColumn(line) > block.start_col())) {
@@ -515,7 +515,7 @@ pub const Parser = struct {
         const col: usize = line[0].src.col;
         var child: *Block = undefined;
         if (cblock.children.items.len == 0) {
-            block.addChild(Block.initContainer(block.allocator(), .ListItem, col)) catch unreachable;
+            block.addChild(Block.initContainer(block.allocator(), .list_item, col)) catch unreachable;
         } else {
             child = &cblock.children.items[cblock.children.items.len - 1];
             const tline = utils.trimLeadingWhitespace(line);
@@ -532,7 +532,7 @@ pub const Parser = struct {
             }
 
             const is_indented: bool = tline.len > 0 and tline[0].src.col > child.start_col() + 1;
-            const wrong_type: bool = if (kind) |k| block.Container.content.List.kind != k else false;
+            const wrong_type: bool = if (kind) |k| block.container.content.list.kind != k else false;
             if (is_break or (wrong_type and !is_indented)) {
                 self.logger.log("Mismatched list type; ending List.\n", .{});
                 self.closeBlock(child);
@@ -547,7 +547,7 @@ pub const Parser = struct {
                 } else {
                     self.logger.log("Adding new ListItem child\n", .{});
                     self.closeBlock(child);
-                    block.addChild(Block.initContainer(block.allocator(), .ListItem, block.start_col())) catch unreachable;
+                    block.addChild(Block.initContainer(block.allocator(), .list_item, block.start_col())) catch unreachable;
                 }
             }
         }
@@ -573,7 +573,7 @@ pub const Parser = struct {
         self.logger.printText(line, false);
 
         var trimmed_line = utils.trimLeadingWhitespace(line);
-        var cblock = block.container();
+        var cblock = &block.container;
 
         // We need special handling for open child blocks whose leading whitespace
         // is arbitrary - e.g, Code blocks.
@@ -583,7 +583,7 @@ pub const Parser = struct {
             if (nchildren == 0) break :blk false;
             const child: *Block = &cblock.children.items[nchildren - 1];
             if (!child.isOpen()) break :blk false;
-            if (!(child.isLeaf() and child.leaf().content == .Code)) break :blk false;
+            if (!(child.isLeaf() and child.leaf.content == .code)) break :blk false;
             self.logger.log("ListItem contains open code block\n", .{});
             break :blk true;
         };
@@ -595,7 +595,7 @@ pub const Parser = struct {
 
             // Check for a task list
             if (utils.taskListLeadIdx(line)) |idx| {
-                block.Container.content.ListItem.checked = utils.isCheckedTaskListItem(line[0..idx]);
+                block.container.content.list_item.checked = utils.isCheckedTaskListItem(line[0..idx]);
             }
         } else {
             self.logger.log("Removing indent with start_col: {d}\n", .{block.start_col()});
@@ -606,9 +606,9 @@ pub const Parser = struct {
                 self.logger.log("useless if statement - ListItem child will handle line\n", .{});
             } else if (trimmed_line.len == 0) {
                 // Empty list item - just create an empty paragraph child
-                var child = Block.initLeaf(self.alloc, .Paragraph, block.start_col());
+                var child = Block.initLeaf(self.alloc, .paragraph, block.start_col());
                 child.close();
-                block.container().children.append(block.allocator(), child) catch unreachable;
+                block.container.children.append(block.allocator(), child) catch unreachable;
                 block.close();
 
                 return true;
@@ -648,21 +648,21 @@ pub const Parser = struct {
         assert(block.isContainer());
 
         const trimmed_line = utils.trimLeadingWhitespace(line);
-        if (trimmed_line.len == 0 or trimmed_line[0].kind != .PIPE) return false;
+        if (trimmed_line.len == 0 or trimmed_line[0].kind != .pipe) return false;
 
         self.logger.log("TABLE\n", .{});
         self.logger.printText(trimmed_line, false);
 
         // A table row must contain *at least* '||' (but pipes inside inline code are literal)
-        if (utils.countKind(trimmed_line, .PIPE) < 2)
+        if (utils.countKind(trimmed_line, .pipe) < 2)
             return false;
 
-        var cblock = block.container();
-        var table = &cblock.content.Table;
+        var cblock = &block.container;
+        var table = &cblock.content.table;
 
         // If any row has a different number of columns, cancel
         if (table.row > 0) {
-            const pipe_count = utils.countKind(trimmed_line, .PIPE);
+            const pipe_count = utils.countKind(trimmed_line, .pipe);
             if (pipe_count != table.ncol + 1) {
                 self.logger.log("Incorrect column count: Expected {d}, got {d}\n", .{ table.ncol, pipe_count -| 1 });
                 return false;
@@ -672,8 +672,8 @@ pub const Parser = struct {
         // Check the 2nd row - this should be the "header" / formatting row
         if (table.row == 1) {
             // Parse the alignment and relative widths of each column
-            var start: ?usize = utils.indexOfTokenPos(trimmed_line, 0, .PIPE);
-            var end: ?usize = utils.indexOfTokenPos(trimmed_line, start.? + 1, .PIPE);
+            var start: ?usize = utils.indexOfTokenPos(trimmed_line, 0, .pipe);
+            var end: ?usize = utils.indexOfTokenPos(trimmed_line, start.? + 1, .pipe);
             while (end != null) {
                 const start_idx: usize = start.?;
                 const end_idx: usize = end.?;
@@ -688,14 +688,14 @@ pub const Parser = struct {
                 var right_marker: bool = false;
                 for (trimmed_line[start_idx..end_idx]) |tok| {
                     switch (tok.kind) {
-                        .COLON => {
+                        .colon => {
                             if (left_marker or dash_count > 0) {
                                 right_marker = true;
                             } else if (dash_count == 0) {
                                 left_marker = true;
                             }
                         },
-                        .MINUS => {
+                        .minus => {
                             dash_count +|= 1;
                         },
                         else => {},
@@ -718,7 +718,7 @@ pub const Parser = struct {
                 // advance to the next column
                 start = end;
                 if (end_idx + 1 < trimmed_line.len) {
-                    end = utils.indexOfTokenPos(trimmed_line, end_idx + 1, .PIPE);
+                    end = utils.indexOfTokenPos(trimmed_line, end_idx + 1, .pipe);
                 } else {
                     end = null;
                 }
@@ -732,14 +732,14 @@ pub const Parser = struct {
         var i: usize = 1;
         while (i < trimmed_line.len) {
             const tok = trimmed_line[i];
-            if (tok.kind == .PIPE) {
+            if (tok.kind == .pipe) {
                 // End of this cell
                 column_count += 1;
                 self.logger.log("Incrementing table column_count\n", .{});
-            } else if (tok.kind == .BREAK) {
+            } else if (tok.kind == .newline) {
                 // End of line
             } else if (i < trimmed_line.len) {
-                if (utils.indexOfTokenPos(trimmed_line, i, .PIPE)) |idx| {
+                if (utils.indexOfTokenPos(trimmed_line, i, .pipe)) |idx| {
                     const child = self.parseNewBlock(trimmed_line[i..idx]) catch unreachable;
                     cblock.children.append(cblock.alloc, child) catch unreachable;
                     i = idx - 1;
@@ -778,13 +778,13 @@ pub const Parser = struct {
         if (!block.isOpen())
             return false;
 
-        var alert: *leaves.Alert = &block.Leaf.content.Alert;
+        var alert: *leaves.Alert = &block.leaf.content.alert;
 
         if (alert.alert == null) {
             // Brand new alert; parse the first line
             const tline = utils.trimLeadingWhitespace(line);
             if (tline.len < 6) return false;
-            std.debug.assert(tline[4].kind == .WORD);
+            std.debug.assert(tline[4].kind == .word);
             alert.alert = block.allocator().dupe(u8, tline[4].text) catch @panic("OOM");
             self.logger.log("  Alert type: {s}\n", .{alert.alert.?});
 
@@ -801,7 +801,7 @@ pub const Parser = struct {
         }
         self.logger.log("  Line continues Alert\n", .{});
 
-        block.Leaf.raw_contents.appendSlice(block.allocator(), tline) catch unreachable;
+        block.leaf.raw_contents.appendSlice(block.allocator(), tline) catch unreachable;
 
         return true;
     }
@@ -816,7 +816,7 @@ pub const Parser = struct {
     pub fn handleLineCode(self: *Self, block: *Block, line: []const Token) bool {
         self.logger.depth += 1;
         defer self.logger.depth -= 1;
-        var code: *leaves.Code = &block.Leaf.content.Code;
+        var code: *leaves.Code = &block.leaf.content.code;
 
         if (!block.isOpen())
             return false;
@@ -827,14 +827,14 @@ pub const Parser = struct {
             if (trimmed_line.len < 1) return false;
 
             // Code block opener. We allow nesting, so track the specific chars
-            if (trimmed_line[0].kind == .DIRECTIVE) {
+            if (trimmed_line[0].kind == .directive) {
                 code.opener = trimmed_line[0].text;
             } else {
                 return false;
             }
 
             // Parse the directive tag (language, or special command like "warning")
-            const end: usize = utils.findFirstOf(trimmed_line, 1, &.{.BREAK}) orelse trimmed_line.len;
+            const end: usize = utils.findFirstOf(trimmed_line, 1, &.{.newline}) orelse trimmed_line.len;
             if (end > 1) {
                 code.tag = toks.concatWords(block.allocator(), trimmed_line[1..end]) catch unreachable;
             }
@@ -853,7 +853,7 @@ pub const Parser = struct {
         // Check if we have the closing code block token on this line
         var have_closer: bool = false;
         for (self.cur_line) |tok| {
-            if (tok.kind == .DIRECTIVE and std.mem.eql(u8, tok.text, code.opener.?)) {
+            if (tok.kind == .directive and std.mem.eql(u8, tok.text, code.opener.?)) {
                 have_closer = true;
                 self.logger.log("Closing current code block\n", .{});
                 break;
@@ -864,7 +864,7 @@ pub const Parser = struct {
                 self.logger.log("Skipping token '{s}' in code block\n", .{tok.text});
                 continue;
             }
-            block.Leaf.raw_contents.append(block.allocator(), tok) catch unreachable;
+            block.leaf.raw_contents.append(block.allocator(), tok) catch unreachable;
         }
 
         if (have_closer)
@@ -881,21 +881,21 @@ pub const Parser = struct {
 
         var level: u8 = 0;
         for (line) |tok| {
-            if (tok.kind != .HASH) break;
+            if (tok.kind != .hash) break;
             level +|= 1;
         }
         if (level <= 0) return false;
         const trimmed_line = utils.trimLeadingWhitespace(line[level..]);
 
-        var head: *leaves.Heading = &block.Leaf.content.Heading;
+        var head: *leaves.Heading = &block.leaf.content.heading;
         head.level = level;
 
-        const end: usize = utils.findFirstOf(trimmed_line, 0, &.{.BREAK}) orelse trimmed_line.len;
-        block.Leaf.raw_contents.appendSlice(block.allocator(), trimmed_line[0..end]) catch unreachable;
+        const end: usize = utils.findFirstOf(trimmed_line, 0, &.{.newline}) orelse trimmed_line.len;
+        block.leaf.raw_contents.appendSlice(block.allocator(), trimmed_line[0..end]) catch unreachable;
         self.closeBlock(block);
 
         // Also get the raw contents as a single string
-        head.text = utils.concatRawText(self.alloc, block.Leaf.raw_contents) catch unreachable;
+        head.text = utils.concatRawText(self.alloc, block.leaf.raw_contents) catch unreachable;
 
         return true;
     }
@@ -928,7 +928,7 @@ pub const Parser = struct {
         }
         self.logger.log("  Line continues paragraph\n", .{});
 
-        block.Leaf.raw_contents.appendSlice(block.allocator(), line) catch unreachable;
+        block.leaf.raw_contents.appendSlice(block.allocator(), line) catch unreachable;
 
         return true;
     }
@@ -946,105 +946,105 @@ pub const Parser = struct {
         self.logger.printText(line, false);
 
         switch (line[0].kind) {
-            .GT => {
+            .gt => {
                 // Check for a Github Alert
                 if (utils.isGithubAlert(line)) {
-                    b = Block.initLeaf(self.alloc, .Alert, col);
-                    b.Leaf.content.Alert = leaves.Alert.init(self.alloc);
+                    b = Block.initLeaf(self.alloc, .alert, col);
+                    b.leaf.content.alert = leaves.Alert.init(self.alloc);
                     if (!self.handleLineAlert(&b, line))
                         return error.ParseError;
                 } else {
                     // Parse quote block
-                    b = Block.initContainer(self.alloc, .Quote, col);
-                    b.Container.content.Quote = {};
+                    b = Block.initContainer(self.alloc, .quote, col);
+                    b.container.content.quote = {};
                     if (!self.handleLineQuote(&b, line))
                         return error.ParseError;
                 }
             },
-            .MINUS => {
+            .minus => {
                 if (utils.isListItem(line)) {
                     // Parse list block
-                    b = Block.initContainer(self.alloc, .List, col);
-                    b.Container.content.List = containers.List{ .kind = .unordered };
+                    b = Block.initContainer(self.alloc, .list, col);
+                    b.container.content.list = containers.List{ .kind = .unordered };
                     if (utils.isTaskListItem(line)) {
-                        b.Container.content.List.kind = .task;
+                        b.container.content.list.kind = .task;
                     } else if (utils.isOrderedListItem(line)) {
-                        b.Container.content.List.kind = .ordered;
+                        b.container.content.list.kind = .ordered;
                     }
-                    self.logger.log("Parsing {s} list with start_col {d}\n", .{ @tagName(b.Container.content.List.kind), col });
+                    self.logger.log("Parsing {s} list with start_col {d}\n", .{ @tagName(b.container.content.list.kind), col });
                     if (!self.handleLineList(&b, line))
                         return error.ParseError;
                 } else {
                     // Fallback - parse paragraph
-                    b = Block.initLeaf(self.alloc, .Paragraph, col);
+                    b = Block.initLeaf(self.alloc, .paragraph, col);
                     if (!self.handleLineParagraph(&b, line))
                         try errorReturn(@src(), "Cannot parse line as paragraph: {any}", .{line});
                 }
             },
-            .STAR => {
+            .star => {
                 if (utils.isListItem(line)) {
                     // Parse unorderd list block
-                    b = Block.initContainer(self.alloc, .List, col);
-                    b.Container.content.List = containers.List{ .kind = .unordered };
+                    b = Block.initContainer(self.alloc, .list, col);
+                    b.container.content.list = containers.List{ .kind = .unordered };
                     if (!self.handleLineList(&b, line))
                         return error.ParseError;
                 } else {
                     // Fallback - parse paragraph
-                    b = Block.initLeaf(self.alloc, .Paragraph, col);
+                    b = Block.initLeaf(self.alloc, .paragraph, col);
                     if (!self.handleLineParagraph(&b, line))
                         try errorReturn(@src(), "Cannot parse line as paragraph: {any}", .{line});
                 }
             },
-            .DIGIT => {
+            .digit => {
                 if (utils.isListItem(line)) {
                     // if (line.len > 1 and line[1].kind == .PERIOD) {
                     // Parse numbered list block
-                    b = Block.initContainer(self.alloc, .List, col);
-                    b.Container.content.List.kind = .ordered;
-                    b.Container.content.List.start = try std.fmt.parseInt(usize, line[0].text, 10);
+                    b = Block.initContainer(self.alloc, .list, col);
+                    b.container.content.list.kind = .ordered;
+                    b.container.content.list.start = try std.fmt.parseInt(usize, line[0].text, 10);
                     if (!self.handleLineList(&b, line))
                         try errorReturn(@src(), "Cannot parse line as numlist: {any}", .{line});
                 } else {
                     // Fallback - parse paragraph
-                    b = Block.initLeaf(self.alloc, .Paragraph, col);
+                    b = Block.initLeaf(self.alloc, .paragraph, col);
                     if (!self.handleLineParagraph(&b, line))
                         try errorReturn(@src(), "Cannot parse line as paragraph: {any}", .{line});
                 }
             },
-            .HASH => {
-                b = Block.initLeaf(self.alloc, .Heading, col);
+            .hash => {
+                b = Block.initLeaf(self.alloc, .heading, col);
                 if (!self.handleLineHeading(&b, line))
                     try errorReturn(@src(), "Cannot parse line as heading: {any}", .{line});
             },
-            .DIRECTIVE => {
-                // TODO: if line == .DIRECTIVE, .LBRACK, .WORD, .RBRACK
+            .directive => {
+                // TODO: if line == .directive, .lbrack, .word, .rbrack
                 //   then it's a Directive, not a Code
-                b = Block.initLeaf(self.alloc, .Code, col);
+                b = Block.initLeaf(self.alloc, .code, col);
                 if (!self.handleLineCode(&b, line))
                     try errorReturn(@src(), "Cannot parse line as code: {any}", .{line});
             },
-            .BREAK => {
-                b = Block.initLeaf(self.alloc, .Break, col);
-                b.Leaf.content.Break = {};
+            .newline => {
+                b = Block.initLeaf(self.alloc, .linebreak, col);
+                b.leaf.content.linebreak = {};
             },
-            .PIPE => {
-                b = Block.initContainer(self.alloc, .Table, col);
+            .pipe => {
+                b = Block.initContainer(self.alloc, .table, col);
                 if (!self.handleLineTable(&b, line)) {
                     try errorReturn(@src(), "Cannot parse line as table: {any}", .{line});
                 }
             },
             else => {
                 // Fallback - parse paragraph
-                b = Block.initLeaf(self.alloc, .Paragraph, col);
+                b = Block.initLeaf(self.alloc, .paragraph, col);
                 if (!self.handleLineParagraph(&b, line))
                     try errorReturn(@src(), "Cannot parse line as paragraph: {any}", .{line});
             },
         }
 
         if (b.isContainer()) {
-            self.logger.log("Parsed new Container: {s}\n", .{@tagName(b.Container.content)});
+            self.logger.log("Parsed new Container: {s}\n", .{@tagName(b.container.content)});
         } else {
-            self.logger.log("Parsed new Leaf: {s}\n", .{@tagName(b.Leaf.content)});
+            self.logger.log("Parsed new Leaf: {s}\n", .{@tagName(b.leaf.content)});
         }
         return b;
     }
@@ -1057,35 +1057,35 @@ pub const Parser = struct {
     fn closeBlock(self: *Self, block: *Block) void {
         if (!block.isOpen()) return;
         switch (block.*) {
-            .Container => |*c| {
+            .container => |*c| {
                 for (c.children.items) |*child| {
                     self.closeBlock(child);
                 }
 
                 switch (c.content) {
-                    .List => {
+                    .list => {
                         if (c.children.items.len == 1) {
                             // Subtract trailing blank lines that occurred after the last block of the list item
-                            c.content.List.spacing -|= c.content.List._current_break_count;
+                            c.content.list.spacing -|= c.content.list._current_break_count;
                         }
                         // Spacing only counts if there are >1 ListItems,
                         // OR if a single item has multiple block children (loose single-item list)
                         const has_multi_item_children: bool = for (c.children.items) |*child| {
-                            if (child.container().children.items.len > 1) break true;
+                            if (child.container.children.items.len > 1) break true;
                         } else false;
                         if (c.children.items.len == 1 and !has_multi_item_children)
-                            c.content.List.spacing = 0;
+                            c.content.list.spacing = 0;
                     },
                     else => {},
                 }
             },
-            .Leaf => |*l| {
+            .leaf => |*l| {
                 switch (l.content) {
-                    .Code => |c| {
+                    .code => |c| {
                         if (c.directive != null) {
                             var p = InlineParser.init(self.alloc, self.opts);
                             defer p.deinit();
-                            self.logger.log("Parsing inlines for Leaf of type {s}\n", .{@tagName(block.Leaf.content)});
+                            self.logger.log("Parsing inlines for Leaf of type {s}\n", .{@tagName(block.leaf.content)});
                             l.inlines = p.parseInlines(l.raw_contents.items) catch unreachable;
                         } else {
                             self.closeBlockCode(block);
@@ -1094,7 +1094,7 @@ pub const Parser = struct {
                     else => {
                         var p = InlineParser.init(self.alloc, self.opts);
                         defer p.deinit();
-                        self.logger.log("Parsing inlines for Leaf of type {s}\n", .{@tagName(block.Leaf.content)});
+                        self.logger.log("Parsing inlines for Leaf of type {s}\n", .{@tagName(block.leaf.content)});
                         l.inlines = p.parseInlines(l.raw_contents.items) catch unreachable;
                     },
                 }
@@ -1104,23 +1104,23 @@ pub const Parser = struct {
     }
 
     fn closeBlockCode(_: *Self, block: *Block) void {
-        const code: *leaves.Code = &block.Leaf.content.Code;
+        const code: *leaves.Code = &block.leaf.content.code;
         if (code.text) |text| {
             code.alloc.free(text);
             code.text = null;
         }
 
         // TODO: Scratch space, scratch allocator in Parser struct
-        var words = ArrayList([]const u8).initCapacity(block.allocator(), block.Leaf.raw_contents.items.len) catch unreachable;
+        var words = ArrayList([]const u8).initCapacity(block.allocator(), block.leaf.raw_contents.items.len) catch unreachable;
         defer words.deinit(block.allocator());
-        for (block.Leaf.raw_contents.items) |tok| {
+        for (block.leaf.raw_contents.items) |tok| {
             words.appendAssumeCapacity(tok.text);
         }
         code.text = std.mem.concat(block.allocator(), u8, words.items) catch unreachable;
     }
 
     fn closeBlockParagraph(self: *Self, block: *Block) void {
-        const leaf: *blocks.Leaf = block.leaf();
+        const leaf: *blocks.Leaf = &block.leaf;
         const tokens = leaf.raw_contents.items;
         self.parseInlines(&leaf.inlines, tokens) catch unreachable;
     }
@@ -1144,27 +1144,27 @@ test "Parser supports table nested in ordered list item" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
 
     const list = &root.children.items[0];
     try std.testing.expect(list.isContainer());
-    try std.testing.expect(list.container().content == .List);
-    try std.testing.expectEqual(@as(usize, 1), list.container().children.items.len);
+    try std.testing.expect(list.container.content == .list);
+    try std.testing.expectEqual(@as(usize, 1), list.container.children.items.len);
 
-    const list_item = &list.container().children.items[0];
+    const list_item = &list.container.children.items[0];
     try std.testing.expect(list_item.isContainer());
-    try std.testing.expect(list_item.container().content == .ListItem);
-    try std.testing.expectEqual(@as(usize, 2), list_item.container().children.items.len);
+    try std.testing.expect(list_item.container.content == .list_item);
+    try std.testing.expectEqual(@as(usize, 2), list_item.container.children.items.len);
 
-    const table = &list_item.container().children.items[1];
+    const table = &list_item.container.children.items[1];
     try std.testing.expect(table.isContainer());
-    try std.testing.expect(table.container().content == .Table);
-    try std.testing.expectEqual(@as(usize, 4), table.container().content.Table.ncol);
-    try std.testing.expectEqual(@as(usize, 3), table.container().content.Table.row);
-    try std.testing.expectEqual(@as(usize, 4), table.container().content.Table.relative_width.items.len);
-    try std.testing.expectEqual(@as(usize, 4), table.container().content.Table.alignment.items.len);
-    try std.testing.expectEqual(@as(usize, 8), table.container().children.items.len);
+    try std.testing.expect(table.container.content == .table);
+    try std.testing.expectEqual(@as(usize, 4), table.container.content.table.ncol);
+    try std.testing.expectEqual(@as(usize, 3), table.container.content.table.row);
+    try std.testing.expectEqual(@as(usize, 4), table.container.content.table.relative_width.items.len);
+    try std.testing.expectEqual(@as(usize, 4), table.container.content.table.alignment.items.len);
+    try std.testing.expectEqual(@as(usize, 8), table.container.children.items.len);
 }
 
 test "Parser: pipe inside inline code is not a table column separator" {
@@ -1180,16 +1180,16 @@ test "Parser: pipe inside inline code is not a table column separator" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
 
     const table = &root.children.items[0];
     try std.testing.expect(table.isContainer());
-    try std.testing.expect(table.container().content == .Table);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.ncol);
-    try std.testing.expectEqual(@as(usize, 3), table.container().content.Table.row);
+    try std.testing.expect(table.container.content == .table);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.ncol);
+    try std.testing.expectEqual(@as(usize, 3), table.container.content.table.row);
     // 2 header cells + 2 body cells (the code-span '|' does not add a column)
-    try std.testing.expectEqual(@as(usize, 4), table.container().children.items.len);
+    try std.testing.expectEqual(@as(usize, 4), table.container.children.items.len);
 }
 
 test "Parser supports table nested in task list item" {
@@ -1206,15 +1206,15 @@ test "Parser supports table nested in task list item" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     const list = &root.children.items[0];
-    const list_item = &list.container().children.items[0];
-    const table = &list_item.container().children.items[1];
+    const list_item = &list.container.children.items[0];
+    const table = &list_item.container.children.items[1];
 
-    try std.testing.expect(list.container().content == .List);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.ncol);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.relative_width.items.len);
-    try std.testing.expectEqual(@as(usize, 4), table.container().children.items.len);
+    try std.testing.expect(list.container.content == .list);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.ncol);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.relative_width.items.len);
+    try std.testing.expectEqual(@as(usize, 4), table.container.children.items.len);
 }
 
 test "Parser: unordered list item with table, no blank line" {
@@ -1230,24 +1230,24 @@ test "Parser: unordered list item with table, no blank line" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
 
     const list = &root.children.items[0];
-    try std.testing.expect(list.container().content == .List);
-    try std.testing.expectEqual(@as(usize, 1), list.container().children.items.len);
+    try std.testing.expect(list.container.content == .list);
+    try std.testing.expectEqual(@as(usize, 1), list.container.children.items.len);
 
-    const list_item = &list.container().children.items[0];
-    try std.testing.expect(list_item.container().content == .ListItem);
+    const list_item = &list.container.children.items[0];
+    try std.testing.expect(list_item.container.content == .list_item);
     // Should have 2 children: Paragraph("Intro") + Table
-    try std.testing.expectEqual(@as(usize, 2), list_item.container().children.items.len);
+    try std.testing.expectEqual(@as(usize, 2), list_item.container.children.items.len);
 
-    const table = &list_item.container().children.items[1];
+    const table = &list_item.container.children.items[1];
     try std.testing.expect(table.isContainer());
-    try std.testing.expect(table.container().content == .Table);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.ncol);
-    try std.testing.expectEqual(@as(usize, 3), table.container().content.Table.row);
-    try std.testing.expectEqual(@as(usize, 4), table.container().children.items.len);
+    try std.testing.expect(table.container.content == .table);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.ncol);
+    try std.testing.expectEqual(@as(usize, 3), table.container.content.table.row);
+    try std.testing.expectEqual(@as(usize, 4), table.container.children.items.len);
 }
 
 test "Parser: unordered list item with table, with blank line, spacing preserved" {
@@ -1264,20 +1264,20 @@ test "Parser: unordered list item with table, with blank line, spacing preserved
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     const list = &root.children.items[0];
-    try std.testing.expect(list.container().content == .List);
+    try std.testing.expect(list.container.content == .list);
 
     // Spacing should be preserved (blank line between paragraph and table)
-    try std.testing.expectEqual(@as(u8, 1), list.container().content.List.spacing);
+    try std.testing.expectEqual(@as(u8, 1), list.container.content.list.spacing);
 
-    const list_item = &list.container().children.items[0];
-    try std.testing.expectEqual(@as(usize, 2), list_item.container().children.items.len);
+    const list_item = &list.container.children.items[0];
+    try std.testing.expectEqual(@as(usize, 2), list_item.container.children.items.len);
 
-    const table = &list_item.container().children.items[1];
-    try std.testing.expect(table.container().content == .Table);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.ncol);
-    try std.testing.expectEqual(@as(usize, 3), table.container().content.Table.row);
+    const table = &list_item.container.children.items[1];
+    try std.testing.expect(table.container.content == .table);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.ncol);
+    try std.testing.expectEqual(@as(usize, 3), table.container.content.table.row);
 }
 
 test "Parser: table row interrupts open paragraph" {
@@ -1295,18 +1295,18 @@ test "Parser: table row interrupts open paragraph" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     // Should have 2 children: Paragraph("Some text") + Table
     try std.testing.expectEqual(@as(usize, 2), root.children.items.len);
 
     const paragraph = &root.children.items[0];
     try std.testing.expect(paragraph.isLeaf());
-    try std.testing.expect(paragraph.leaf().content == .Paragraph);
+    try std.testing.expect(paragraph.leaf.content == .paragraph);
 
     const table = &root.children.items[1];
     try std.testing.expect(table.isContainer());
-    try std.testing.expect(table.container().content == .Table);
-    try std.testing.expectEqual(@as(usize, 2), table.container().content.Table.ncol);
+    try std.testing.expect(table.container.content == .table);
+    try std.testing.expectEqual(@as(usize, 2), table.container.content.table.ncol);
 }
 
 test "paragraph with lone tilde has no strikethrough inlines" {
@@ -1316,10 +1316,10 @@ test "paragraph with lone tilde has no strikethrough inlines" {
     defer p.deinit();
     try p.parse("Temperature is ~20 degrees C");
 
-    const root = p.document.container();
+    const root = p.document.container;
     try std.testing.expectEqual(@as(usize, 1), root.children.items.len);
 
-    const para = root.children.items[0].leaf();
+    const para = &root.children.items[0].leaf;
     for (para.inlines.items) |inl| {
         if (inl.content == .text) {
             try std.testing.expect(!inl.content.text.style.strike);
@@ -1334,8 +1334,8 @@ test "paragraph with matched tildes has strikethrough inlines" {
     defer p.deinit();
     try p.parse("This is ~struck~ text");
 
-    const root = p.document.container();
-    const para = root.children.items[0].leaf();
+    const root = &p.document.container;
+    const para = &root.children.items[0].leaf;
 
     var found_struck: bool = false;
     var found_plain: bool = false;
@@ -1361,21 +1361,21 @@ test "Parser: escaped pipe in table cell is not a column separator" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
     const table = &root.children.items[0];
-    try std.testing.expect(table.container().content == .Table);
+    try std.testing.expect(table.container.content == .table);
     // 1 column
-    try std.testing.expectEqual(@as(usize, 1), table.container().content.Table.ncol);
+    try std.testing.expectEqual(@as(usize, 1), table.container.content.table.ncol);
     // 3 rows: header, separator, data
-    try std.testing.expectEqual(@as(usize, 3), table.container().content.Table.row);
+    try std.testing.expectEqual(@as(usize, 3), table.container.content.table.row);
     // 2 children: 1 header cell "A" + 1 data cell "foo \| bar"
-    try std.testing.expectEqual(@as(usize, 2), table.container().children.items.len);
+    try std.testing.expectEqual(@as(usize, 2), table.container.children.items.len);
 
     // The data cell (index 1) should contain an 'escaped' inline for '|'
-    const cell = &table.container().children.items[1];
+    const cell = &table.container.children.items[1];
     try std.testing.expect(cell.isLeaf());
     var found_escaped = false;
-    for (cell.leaf().inlines.items) |inl| {
+    for (cell.leaf.inlines.items) |inl| {
         if (inl.content == .escaped and inl.content.escaped == '|') {
             found_escaped = true;
         }
@@ -1397,14 +1397,14 @@ test "sub-list blank line does not corrupt outer list spacing" {
     defer p.deinit();
     try p.parse(input);
 
-    const root = p.document.container();
+    const root = p.document.container;
 
     // Check first element: outer List
     const outer_list = &root.children.items[0];
-    try std.testing.expect(outer_list.container().content == .List);
+    try std.testing.expect(outer_list.container.content == .list);
 
     // The spacing of the outer list should be 0 because the empty line was trailing
-    try std.testing.expectEqual(@as(u8, 0), outer_list.container().content.List.spacing);
+    try std.testing.expectEqual(@as(u8, 0), outer_list.container.content.list.spacing);
 }
 
 test "toOwnedDocument transfers ownership to caller" {
@@ -1418,12 +1418,12 @@ test "toOwnedDocument transfers ownership to caller" {
     p.deinit();
     // p.document should now be a new object
 
-    const root = doc.container();
+    const root = doc.container;
 
     // Check first element: outer List
     const outer_list = &root.children.items[0];
-    try std.testing.expect(outer_list.container().content == .List);
+    try std.testing.expect(outer_list.container.content == .list);
 
     // The spacing of the outer list should be 0 because the empty line was trailing
-    try std.testing.expectEqual(@as(u8, 0), outer_list.container().content.List.spacing);
+    try std.testing.expectEqual(@as(u8, 0), outer_list.container.content.list.spacing);
 }

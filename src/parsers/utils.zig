@@ -40,8 +40,8 @@ pub fn countLeadingWhitespace(line: []const Token) usize {
     var leading_ws: usize = 0;
     for (line) |tok| {
         switch (tok.kind) {
-            .SPACE => leading_ws += 1,
-            .INDENT => leading_ws += 2,
+            .space => leading_ws += 1,
+            .indent => leading_ws += 2,
             else => return leading_ws,
         }
     }
@@ -53,7 +53,7 @@ pub fn trimLeadingWhitespace(line: []const Token) []const Token {
     if (line.len == 0) return line;
     var start: usize = line.len - 1;
     for (line, 0..) |tok, i| {
-        if (!(tok.kind == .SPACE or tok.kind == .INDENT)) {
+        if (!(tok.kind == .space or tok.kind == .indent)) {
             start = i;
             break;
         }
@@ -69,7 +69,7 @@ pub fn trimTrailingWhitespace(line: []const Token) []const Token {
     while (i > 0) : (i -= 1) {
         const tok = line[i - 1];
         switch (tok.kind) {
-            .SPACE, .INDENT, .BREAK => {},
+            .space, .indent, .newline => {},
             else => {
                 end = i;
                 break;
@@ -85,14 +85,14 @@ pub fn removeIndent(line: []const Token, max_ws: usize) []const Token {
     var ws_count: usize = 0;
     for (line, 0..) |tok, i| {
         switch (tok.kind) {
-            .SPACE => {
+            .space => {
                 ws_count += 1;
                 if (ws_count > max_ws) {
                     start = i;
                     break;
                 }
             },
-            .INDENT => {
+            .indent => {
                 ws_count += 2;
                 if (ws_count > max_ws) {
                     start = i;
@@ -126,7 +126,7 @@ pub fn nextBreak(tokens: []const Token, idx: usize) usize {
         return tokens.len;
 
     for (tokens[idx..], idx..) |tok, i| {
-        if (tok.kind == .BREAK)
+        if (tok.kind == .newline)
             return i;
     }
 
@@ -141,7 +141,7 @@ pub fn getLine(tokens: []const Token, start: usize) ?[]const Token {
 }
 
 pub fn isEmptyLine(line: []const Token) bool {
-    if (line.len == 0 or line[0].kind == .BREAK)
+    if (line.len == 0 or line[0].kind == .newline)
         return true;
 
     return false;
@@ -149,7 +149,7 @@ pub fn isEmptyLine(line: []const Token) bool {
 
 pub fn isWhitespace(kind: TokenType) bool {
     return switch (kind) {
-        .SPACE, .INDENT, .BREAK => true,
+        .space, .indent, .newline => true,
         else => false,
     };
 }
@@ -170,15 +170,15 @@ pub fn isOrderedListItem(line: []const Token) bool {
     var have_digit: bool = false;
     for (trimLeadingWhitespace(line)) |tok| {
         switch (tok.kind) {
-            .DIGIT => {
+            .digit => {
                 if (have_period) return false;
                 have_digit = true;
             },
-            .PERIOD => {
+            .period => {
                 if (!have_digit) return false;
                 have_period = true;
             },
-            .SPACE, .INDENT, .BREAK => {
+            .space, .indent, .newline => {
                 if (have_period) return true;
                 return false;
             },
@@ -194,12 +194,12 @@ pub fn isUnorderedListItem(line: []const Token) bool {
     var have_bullet: bool = false;
     for (trimLeadingWhitespace(line)) |tok| {
         switch (tok.kind) {
-            .SPACE, .INDENT, .BREAK => {
+            .space, .indent, .newline => {
                 if (have_bullet) return true;
                 return false;
             },
-            .PLUS, .MINUS, .STAR => {
-                if (have_bullet and tok.kind != .STAR) return false; // Can only have one bullet character
+            .plus, .minus, .star => {
+                if (have_bullet and tok.kind != .star) return false; // Can only have one bullet character
                 have_bullet = true;
             },
             else => return false,
@@ -230,23 +230,23 @@ pub fn taskListLeadIdx(line: []const Token) ?usize {
         switch (state) {
             .start => {
                 switch (tok.kind) {
-                    .PLUS, .MINUS, .STAR => state = .have_bullet,
-                    .SPACE, .INDENT => {},
+                    .plus, .minus, .star => state = .have_bullet,
+                    .space, .indent => {},
                     else => return null,
                 }
             },
             .have_bullet => {
                 switch (tok.kind) {
-                    .LBRACK => state = .have_lbrack,
-                    .SPACE, .INDENT => {},
+                    .lbrack => state = .have_lbrack,
+                    .space, .indent => {},
                     else => return null,
                 }
             },
             .have_lbrack => {
                 switch (tok.kind) {
-                    .RBRACK => state = .have_rbrack,
-                    .SPACE, .INDENT => {},
-                    .WORD => {
+                    .rbrack => state = .have_rbrack,
+                    .space, .indent => {},
+                    .word => {
                         // We only allow a single character inside the '[]'
                         if (tok.text.len == 1) {
                             state = .have_check;
@@ -259,14 +259,14 @@ pub fn taskListLeadIdx(line: []const Token) ?usize {
             },
             .have_check => {
                 switch (tok.kind) {
-                    .RBRACK => state = .have_rbrack,
-                    .SPACE, .INDENT => {},
+                    .rbrack => state = .have_rbrack,
+                    .space, .indent => {},
                     else => return null,
                 }
             },
             .have_rbrack => {
                 switch (tok.kind) {
-                    .SPACE, .INDENT => state = .have_space,
+                    .space, .indent => state = .have_space,
                     else => return null,
                 }
             },
@@ -281,8 +281,8 @@ pub fn taskListLeadIdx(line: []const Token) ?usize {
 /// 'leaders' must contain a valid task list start, e.g. '- [ ]'
 pub fn isCheckedTaskListItem(leaders: []const Token) bool {
     for (leaders, 0..) |tok, i| {
-        if (tok.kind == .LBRACK and i < leaders.len - 1) {
-            if (leaders[i + 1].kind == .WORD)
+        if (tok.kind == .lbrack and i < leaders.len - 1) {
+            if (leaders[i + 1].kind == .word)
                 return true;
             return false;
         }
@@ -299,8 +299,8 @@ pub fn isListItem(line: []const Token) bool {
 pub fn isTableRow(line: []const Token) bool {
     const trimmed = trimLeadingWhitespace(line);
     if (trimmed.len == 0) return false;
-    if (trimmed[0].kind != .PIPE) return false;
-    return countKind(trimmed, .PIPE) >= 2;
+    if (trimmed[0].kind != .pipe) return false;
+    return countKind(trimmed, .pipe) >= 2;
 }
 
 /// Check for the pattern "[ ]*[>][ ]+"
@@ -308,11 +308,11 @@ pub fn isQuote(line: []const Token) bool {
     var have_caret: bool = false;
     for (trimLeadingWhitespace(line)) |tok| {
         switch (tok.kind) {
-            .GT => {
+            .gt => {
                 if (have_caret) return false;
                 have_caret = true;
             },
-            .SPACE, .INDENT => {
+            .space, .indent => {
                 if (have_caret) return true;
             },
             else => return false,
@@ -327,10 +327,10 @@ pub fn isHeading(line: []const Token) bool {
     var have_hash: bool = false;
     for (trimLeadingWhitespace(line)) |tok| {
         switch (tok.kind) {
-            .HASH => {
+            .hash => {
                 have_hash = true;
             },
-            .SPACE, .INDENT => {
+            .space, .indent => {
                 if (have_hash) return true;
             },
             else => return false,
@@ -343,8 +343,8 @@ pub fn isHeading(line: []const Token) bool {
 pub fn isCodeBlock(line: []const Token) bool {
     for (line) |tok| {
         switch (tok.kind) {
-            .DIRECTIVE => return true,
-            .SPACE, .INDENT => {},
+            .directive => return true,
+            .space, .indent => {},
             else => return false,
         }
     }
@@ -358,47 +358,47 @@ pub fn isGithubAlert(line: []const Token) bool {
     const tline = trimLeadingWhitespace(trimTrailingWhitespace(line));
     if (tline.len != 6) return false;
 
-    if (tline[0].kind != .GT) return false;
-    if (!(tline[1].kind == .SPACE or tline[1].kind == .INDENT))
+    if (tline[0].kind != .gt) return false;
+    if (!(tline[1].kind == .space or tline[1].kind == .indent))
         return false;
-    if (tline[2].kind != .LBRACK) return false;
-    if (tline[3].kind != .BANG) return false;
-    if (tline[4].kind != .WORD) return false;
-    if (tline[5].kind != .RBRACK) return false;
+    if (tline[2].kind != .lbrack) return false;
+    if (tline[3].kind != .bang) return false;
+    if (tline[4].kind != .word) return false;
+    if (tline[5].kind != .rbrack) return false;
 
     return true;
 }
 
 test isGithubAlert {
     const is_alert: []const Token = &.{
-        .{ .kind = .GT, .text = ">" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .LBRACK, .text = "[" },
-        .{ .kind = .BANG, .text = "!" },
-        .{ .kind = .WORD, .text = "INFO" },
-        .{ .kind = .RBRACK, .text = "]" },
-        .{ .kind = .BREAK, .text = "\n" },
+        .{ .kind = .gt, .text = ">" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .lbrack, .text = "[" },
+        .{ .kind = .bang, .text = "!" },
+        .{ .kind = .word, .text = "INFO" },
+        .{ .kind = .rbrack, .text = "]" },
+        .{ .kind = .newline, .text = "\n" },
     };
     try std.testing.expect(isGithubAlert(is_alert));
 
     const not_alert1: []const Token = &.{
-        .{ .kind = .GT, .text = ">" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .BANG, .text = "!" },
-        .{ .kind = .WORD, .text = "INFO" },
-        .{ .kind = .BREAK, .text = "\n" },
+        .{ .kind = .gt, .text = ">" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .bang, .text = "!" },
+        .{ .kind = .word, .text = "INFO" },
+        .{ .kind = .newline, .text = "\n" },
     };
     try std.testing.expect(!isGithubAlert(not_alert1));
 
     // Note: `![...]` is incorrect; `[!...]` is correct
     const not_alert2: []const Token = &.{
-        .{ .kind = .GT, .text = ">" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .BANG, .text = "!" },
-        .{ .kind = .LBRACK, .text = "[" },
-        .{ .kind = .WORD, .text = "INFO" },
-        .{ .kind = .RBRACK, .text = "]" },
-        .{ .kind = .BREAK, .text = "\n" },
+        .{ .kind = .gt, .text = ">" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .bang, .text = "!" },
+        .{ .kind = .lbrack, .text = "[" },
+        .{ .kind = .word, .text = "INFO" },
+        .{ .kind = .rbrack, .text = "]" },
+        .{ .kind = .newline, .text = "\n" },
     };
     try std.testing.expect(!isGithubAlert(not_alert2));
 }
@@ -533,15 +533,15 @@ pub fn appendSingleToken(alloc: Allocator, inlines: *ArrayList(Inline), token: T
 /// TODO: Handle escaped characters and inline code (e.g. "`]`" or "\]")
 pub fn validateLink(in_line: []const Token) bool {
     const line: []const Token = getLine(in_line, 0) orelse return false;
-    if (line[0].kind != .LBRACK) return false;
+    if (line[0].kind != .lbrack) return false;
 
     // Find the ']' corresponding to the first '['
     const rb_idx: usize = blk: {
         var bcount: i32 = 0;
         for (line, 0..) |tok, i| {
             switch (tok.kind) {
-                .RBRACK => bcount -= 1,
-                .LBRACK => bcount += 1,
+                .rbrack => bcount -= 1,
+                .lbrack => bcount += 1,
                 else => {},
             }
             if (bcount == 0) break :blk @intCast(i);
@@ -552,15 +552,15 @@ pub fn validateLink(in_line: []const Token) bool {
     if (rb_idx <= 0 or rb_idx + 2 >= line.len) return false;
 
     // Check that the next character is '('
-    if (line[rb_idx + 1].kind != .LPAREN) return false;
+    if (line[rb_idx + 1].kind != .lparen) return false;
 
     // Find the matching ')', accounting for nested "()"
     const rp_idx: usize = blk: {
         var pcount: i32 = 1; // Start with one '(' immediately behind us
         for (line[rb_idx + 2 ..], rb_idx + 2..) |tok, i| {
             switch (tok.kind) {
-                .RPAREN => pcount -= 1,
-                .LPAREN => pcount += 1,
+                .rparen => pcount -= 1,
+                .lparen => pcount += 1,
                 else => {},
             }
             if (pcount == 0) break :blk @intCast(i);
@@ -612,7 +612,7 @@ pub fn countKind(line: []const Token, kind: TokenType) usize {
     var count: usize = 0;
     var in_code: bool = false;
     for (line) |tok| {
-        if (tok.kind == .CODE_INLINE) in_code = !in_code;
+        if (tok.kind == .code_inline) in_code = !in_code;
         if (tok.kind == kind and !in_code) count += 1;
     }
     return count;
@@ -626,7 +626,7 @@ pub fn countKind(line: []const Token, kind: TokenType) usize {
 pub fn indexOfTokenPos(line: []const Token, start_index: usize, kind: TokenType) ?usize {
     var in_code: bool = false;
     for (line[start_index..], start_index..) |tok, i| {
-        if (tok.kind == .CODE_INLINE) in_code = !in_code;
+        if (tok.kind == .code_inline) in_code = !in_code;
         if (tok.kind == kind and !in_code) return i;
     }
     return null;

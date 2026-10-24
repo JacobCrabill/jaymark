@@ -34,7 +34,7 @@ pub const Lexer = struct {
         var tokens: ArrayList(Token) = .empty;
         var token = self.next();
         try tokens.append(alloc, token);
-        while (token.kind != .EOF) {
+        while (token.kind != .eof) {
             token = self.next();
             try tokens.append(alloc, token);
         }
@@ -77,7 +77,7 @@ pub const Lexer = struct {
                     .src = self.src,
                 };
 
-                if (token.kind == .BREAK) {
+                if (token.kind == .newline) {
                     self.src.row += 1;
                     self.src.col = 0;
                 } else {
@@ -90,7 +90,7 @@ pub const Lexer = struct {
 
         // If all else fails, return UNKNOWN
         const token = Token{
-            .kind = .UNKNOWN,
+            .kind = .unknown,
             .text = self.data[self.cursor .. self.cursor + 1],
             .src = self.src,
         };
@@ -116,47 +116,47 @@ test "Tokenize" {
     ;
 
     const expected_tokens = [_]Token{
-        .{ .kind = .HASH, .text = "#" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .WORD, .text = "Heading" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .DIGIT, .text = "1" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .HASH, .text = "#" },
-        .{ .kind = .HASH, .text = "#" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .WORD, .text = "Heading" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .WORD, .text = "Two" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .WORD, .text = "Text" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .USCORE, .text = "_" },
-        .{ .kind = .WORD, .text = "italic" },
-        .{ .kind = .USCORE, .text = "_" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .BOLD, .text = "**" },
-        .{ .kind = .WORD, .text = "bold" },
-        .{ .kind = .BOLD, .text = "**" },
-        .{ .kind = .SPACE, .text = " " },
-        .{ .kind = .EMBOLD, .text = "___" },
-        .{ .kind = .WORD, .text = "bold" },
-        .{ .kind = .USCORE, .text = "_" },
-        .{ .kind = .WORD, .text = "italic" },
-        .{ .kind = .EMBOLD, .text = "___" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .TILDE, .text = "~" },
-        .{ .kind = .WORD, .text = "underline" },
-        .{ .kind = .TILDE, .text = "~" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .DIRECTIVE, .text = "```" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .STAR, .text = "*" },
-        .{ .kind = .WORD, .text = "Ääbc" },
-        .{ .kind = .STAR, .text = "*" },
-        .{ .kind = .BREAK, .text = "\n" },
-        .{ .kind = .BSLASH, .text = "\\" },
+        .{ .kind = .hash, .text = "#" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .word, .text = "Heading" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .digit, .text = "1" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .hash, .text = "#" },
+        .{ .kind = .hash, .text = "#" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .word, .text = "Heading" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .word, .text = "Two" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .word, .text = "Text" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .uscore, .text = "_" },
+        .{ .kind = .word, .text = "italic" },
+        .{ .kind = .uscore, .text = "_" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .bold, .text = "**" },
+        .{ .kind = .word, .text = "bold" },
+        .{ .kind = .bold, .text = "**" },
+        .{ .kind = .space, .text = " " },
+        .{ .kind = .embold, .text = "___" },
+        .{ .kind = .word, .text = "bold" },
+        .{ .kind = .uscore, .text = "_" },
+        .{ .kind = .word, .text = "italic" },
+        .{ .kind = .embold, .text = "___" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .tilde, .text = "~" },
+        .{ .kind = .word, .text = "underline" },
+        .{ .kind = .tilde, .text = "~" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .directive, .text = "```" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .star, .text = "*" },
+        .{ .kind = .word, .text = "Ääbc" },
+        .{ .kind = .star, .text = "*" },
+        .{ .kind = .newline, .text = "\n" },
+        .{ .kind = .bslash, .text = "\\" },
     };
 
     var lex = Lexer{};
@@ -166,7 +166,7 @@ test "Tokenize" {
         try compareTokens(token, lex.next());
     }
 
-    try std.testing.expectEqual(TokenType.EOF, lex.next().kind);
+    try std.testing.expectEqual(TokenType.eof, lex.next().kind);
 }
 
 /// Compare an expected token to a token from the Lexer
@@ -182,22 +182,22 @@ fn compareTokens(expected: Token, actual: Token) !void {
     };
 }
 
-test "Lexer: escaped pipe tokenizes as ESCAPED" {
+test "Lexer: escaped pipe tokenizes as escaped" {
     const lexer = @import("lexer.zig");
     var lex = lexer.Lexer{};
     var tokens = try lex.tokenize(std.testing.allocator, "\\|");
     defer tokens.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
-    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
+    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // escaped + eof
+    try std.testing.expectEqual(TokenType.escaped, tokens.items[0].kind);
     try std.testing.expectEqualStrings("\\|", tokens.items[0].text);
 }
 
-test "Lexer: escaped backslash tokenizes as ESCAPED" {
+test "Lexer: escaped backslash tokenizes as escaped" {
     const lexer = @import("lexer.zig");
     var lex = lexer.Lexer{};
     var tokens = try lex.tokenize(std.testing.allocator, "\\\\");
     defer tokens.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // ESCAPED + EOF
-    try std.testing.expectEqual(TokenType.ESCAPED, tokens.items[0].kind);
+    try std.testing.expectEqual(@as(usize, 2), tokens.items.len); // escaped + eof
+    try std.testing.expectEqual(TokenType.escaped, tokens.items[0].kind);
     try std.testing.expectEqualStrings("\\\\", tokens.items[0].text);
 }

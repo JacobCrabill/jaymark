@@ -100,13 +100,13 @@ pub const InlineParser = struct {
     // Utility Functions
     ///////////////////////////////////////////////////////
 
-    /// Return the index of the next BREAK token, or EOF
+    /// Return the index of the next newline token, or EOF
     fn nextBreak(self: *Self, idx: usize) usize {
         if (idx >= self.tokens.items.len)
             return self.tokens.items.len;
 
         for (self.tokens.items[idx..], idx..) |tok, i| {
-            if (tok.kind == .BREAK)
+            if (tok.kind == .newline)
                 return i;
         }
 
@@ -131,8 +131,8 @@ pub const InlineParser = struct {
         // TODO: make this 'scratch workspace' part of the Parser struct
         // to avoid constant re-init (use clearRetainingCapacity() instead of deinit())
 
-        var prev_type: TokenType = .BREAK;
-        var next_type: TokenType = .BREAK;
+        var prev_type: TokenType = .newline;
+        var next_type: TokenType = .newline;
         var next_text: []const u8 = "";
 
         var i: usize = 0;
@@ -142,26 +142,26 @@ pub const InlineParser = struct {
                 next_type = tokens[i + 1].kind;
                 next_text = tokens[i + 1].text;
             } else {
-                next_type = .BREAK;
+                next_type = .newline;
                 next_text = "";
             }
             switch (tok.kind) {
-                .EMBOLD => {
+                .embold => {
                     style.bold = !style.bold;
                     style.italic = !style.italic;
                 },
-                .STAR => {
+                .star => {
                     if (style.italic and style.bold) {
                         style.bold = false;
                     } else {
                         style.italic = !style.italic;
                     }
                 },
-                .BOLD => {
+                .bold => {
                     // TODO: Properly handle emphasis between *, **, ***, * word ** word***, etc.
                     style.bold = !style.bold;
                 },
-                .USCORE => {
+                .uscore => {
                     // If it's an underscore in the middle of a word, don't toggle style with it
                     const prev_is_ws: bool = utils.isWhitespace(prev_type);
                     const next_is_ws: bool = utils.isWhitespace(next_type) or (std.mem.indexOfAny(u8, next_text, ",.;:'\"") != null);
@@ -171,11 +171,11 @@ pub const InlineParser = struct {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                     }
                 },
-                .TILDE => {
+                .tilde => {
                     if (style.strike) {
                         // Already inside a strikethrough span — close it unconditionally.
                         style.strike = false;
-                    } else if (utils.findFirstOf(tokens, i + 1, &.{.TILDE})) |idx| {
+                    } else if (utils.findFirstOf(tokens, i + 1, &.{.tilde})) |idx| {
                         if (idx > i + 1 and !utils.isWhitespace(tokens[idx - 1].kind)) {
                             // Only open a span when a matching closing ~ exists later in the same block.
                             style.strike = true;
@@ -188,8 +188,8 @@ pub const InlineParser = struct {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                     }
                 },
-                .BANG, .LBRACK => {
-                    const bang: bool = tok.kind == .BANG;
+                .bang, .lbrack => {
+                    const bang: bool = tok.kind == .bang;
                     const start: usize = if (bang) i + 1 else i;
                     if (utils.validateLink(tokens[start..])) {
                         const n: usize = try self.parseLinkOrImage(&inlines, tokens[i..], bang);
@@ -198,8 +198,8 @@ pub const InlineParser = struct {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                     }
                 },
-                .CODE_INLINE => {
-                    if (utils.findFirstOf(tokens, i + 1, &.{.CODE_INLINE})) |end| {
+                .code_inline => {
+                    if (utils.findFirstOf(tokens, i + 1, &.{.code_inline})) |end| {
                         // Create a codespan with position information
                         const code_start = i + 1;
                         const code_end = end;
@@ -232,9 +232,9 @@ pub const InlineParser = struct {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                     }
                 },
-                .LT => {
+                .lt => {
                     // Autolink
-                    if (utils.findFirstOf(tokens, i + 1, &.{.GT})) |end| {
+                    if (utils.findFirstOf(tokens, i + 1, &.{.gt})) |end| {
                         const link_start = i + 1;
                         const link_end = end;
 
@@ -266,21 +266,21 @@ pub const InlineParser = struct {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                     }
                 },
-                .BREAK => {
-                    if (prev_type == .SPACE or prev_type == .BREAK) continue;
+                .newline => {
+                    if (prev_type == .space or prev_type == .newline) continue;
                     // Treat line breaks as spaces; Don't clear the style (The renderer deals with wrapping)
                     var space_token = tok;
                     space_token.text = " ";
                     try utils.appendSingleToken(self.alloc, &inlines, space_token, style);
                 },
-                .ESCAPED => {
+                .escaped => {
                     try inlines.append(self.alloc, Inline.initWithContent(
                         self.alloc,
                         inls.InlineData{ .escaped = tok.text[1] },
                     ));
                 },
-                .SPACE => {
-                    if (prev_type == .SPACE or prev_type == .BREAK) continue;
+                .space => {
+                    if (prev_type == .space or prev_type == .newline) continue;
                     try utils.appendSingleToken(self.alloc, &inlines, tok, style);
                 },
                 else => {
@@ -315,8 +315,8 @@ pub const InlineParser = struct {
             var bcount: i32 = 0;
             for (line, 0..) |tok, i| {
                 switch (tok.kind) {
-                    .RBRACK => bcount -= 1,
-                    .LBRACK => bcount += 1,
+                    .rbrack => bcount -= 1,
+                    .lbrack => bcount += 1,
                     else => {},
                 }
                 if (bcount == 0) break :blk i;
@@ -331,8 +331,8 @@ pub const InlineParser = struct {
             var pcount: i32 = 1; // start with 1 lparen immediately behind us
             for (line[lp_idx..], lp_idx..) |tok, i| {
                 switch (tok.kind) {
-                    .RPAREN => pcount -= 1,
-                    .LPAREN => pcount += 1,
+                    .rparen => pcount -= 1,
+                    .lparen => pcount += 1,
                     else => {},
                 }
                 if (pcount == 0) break :blk i;
@@ -356,17 +356,17 @@ pub const InlineParser = struct {
 
             // Handle formatting tokens
             switch (tok.kind) {
-                .EMBOLD => {
+                .embold => {
                     style.bold = !style.bold;
                     style.italic = !style.italic;
                 },
-                .STAR, .BOLD => {
+                .star, .bold => {
                     style.bold = !style.bold;
                 },
-                .USCORE => {
+                .uscore => {
                     // If it's an underscore in the middle of a word, don't toggle style with it
-                    if ((i > 0 and alt_text[i - 1].kind == .WORD) and
-                        (i + 1 < alt_text.len and alt_text[i + 1].kind == .WORD))
+                    if ((i > 0 and alt_text[i - 1].kind == .word) and
+                        (i + 1 < alt_text.len and alt_text[i + 1].kind == .word))
                     {
                         // Add the underscore as a regular character
                         const text = inls.Text{
@@ -381,10 +381,10 @@ pub const InlineParser = struct {
                         style.italic = !style.italic;
                     }
                 },
-                .TILDE => {
+                .tilde => {
                     if (style.strike) {
                         style.strike = false;
-                    } else if (utils.findFirstOf(alt_text, i + 1, &.{.TILDE}) != null) {
+                    } else if (utils.findFirstOf(alt_text, i + 1, &.{.tilde}) != null) {
                         style.strike = true;
                     } else {
                         const text = inls.Text{
@@ -397,7 +397,7 @@ pub const InlineParser = struct {
                         try link_text_block.append(self.alloc, text);
                     }
                 },
-                .BREAK => {
+                .newline => {
                     // Treat line breaks as spaces; Don't clear the style
                     const text = inls.Text{
                         .alloc = self.alloc,
@@ -485,7 +485,7 @@ fn parseInlinesFromStr(alloc: std.mem.Allocator, input: []const u8) !ArrayList(I
     defer tokens.deinit(alloc);
 
     // Strip the trailing EOF token before passing to the inline parser
-    const tok_slice = if (tokens.items.len > 0 and tokens.items[tokens.items.len - 1].kind == .EOF)
+    const tok_slice = if (tokens.items.len > 0 and tokens.items[tokens.items.len - 1].kind == .eof)
         tokens.items[0 .. tokens.items.len - 1]
     else
         tokens.items;

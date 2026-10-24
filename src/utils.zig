@@ -124,7 +124,7 @@ pub fn getLeafNode(block: *Block) ?*Block {
     if (block.isLeaf()) {
         return block;
     }
-    for (block.Container.children.items) |*child| {
+    for (block.container.children.items) |*child| {
         if (getLeafNode(child)) |b| {
             return b;
         }
@@ -136,10 +136,10 @@ pub fn getLeafNode(block: *Block) ?*Block {
 /// The returned Block is a List of plain text containing the text for each heading.
 pub fn generateTableOfContents(io: std.Io, alloc: Allocator, block: *const Block) !Block {
     std.debug.assert(block.isContainer());
-    std.debug.assert(block.Container.content == .Document);
-    const doc = block.Container;
+    std.debug.assert(block.container.content == .document);
+    const doc = &block.container;
 
-    var toc = Block.initContainer(alloc, .List, 0);
+    var toc = Block.initContainer(alloc, .list, 0);
 
     const Entry = struct {
         level: usize = 0,
@@ -152,10 +152,10 @@ pub fn generateTableOfContents(io: std.Io, alloc: Allocator, block: *const Block
     var last: Entry = stack.getLast();
     for (doc.children.items) |b| {
         switch (b) {
-            .Container => {},
-            .Leaf => |l| {
+            .container => {},
+            .leaf => |l| {
                 switch (l.content) {
-                    .Heading => |H| {
+                    .heading => |H| {
                         const item = try getListItemForHeading(io, block.allocator(), H, 0);
 
                         if (H.level > last.level) {
@@ -163,7 +163,7 @@ pub fn generateTableOfContents(io: std.Io, alloc: Allocator, block: *const Block
                             // Create a new List and add it as a child of the current ListItem
                             // TODO: Better handling for jumping straight from level 1 to level N
                             const cur_item: *Block = last.block.lastChild() orelse last.block;
-                            const sub_toc = Block.initContainer(block.allocator(), .List, 0);
+                            const sub_toc = Block.initContainer(block.allocator(), .list, 0);
                             try cur_item.addChild(sub_toc);
 
                             // Push the new List onto the stack
@@ -198,7 +198,7 @@ pub fn generateTableOfContents(io: std.Io, alloc: Allocator, block: *const Block
 /// referenced document if it exists locally within the site's directory tree.
 pub fn generateNavigationTree(io: std.Io, alloc: Allocator, root_dir: std.Io.Dir, root_file: []const u8, document_root: *const Block) !NavBarItem {
     std.debug.assert(document_root.isContainer());
-    std.debug.assert(document_root.Container.content == .Document);
+    std.debug.assert(document_root.container.content == .document);
 
     // Grab the first level-1 Heading from the document (if it exists) and use that as the title.
     // Otherwise, use the filename as the title.
@@ -389,8 +389,8 @@ test generateNavigationTree {
 /// Returns a heap-allocated list of NavLink objects (link text + URI string).
 pub fn extractLinksFromDocument(io: std.Io, alloc: Allocator, root_dir: std.Io.Dir, root: *const Block) ![]const NavLink {
     std.debug.assert(root.isContainer());
-    std.debug.assert(root.Container.content == .Document);
-    const doc = root.Container;
+    std.debug.assert(root.container.content == .document);
+    const doc = &root.container;
 
     var links: std.ArrayList(NavLink) = .empty;
 
@@ -404,14 +404,14 @@ pub fn extractLinksFromDocument(io: std.Io, alloc: Allocator, root_dir: std.Io.D
 /// Recursively traverse a document AST, appending all links found to the 'links' ArrayList.
 fn extractLinksRecurse(io: std.Io, alloc: Allocator, current_dir: std.Io.Dir, links: *std.ArrayList(NavLink), block: *const Block) !void {
     switch (block.*) {
-        .Container => |c| {
+        .container => |c| {
             for (c.children.items) |child| {
                 try extractLinksRecurse(io, alloc, current_dir, links, &child);
             }
         },
-        .Leaf => |l| {
+        .leaf => |l| {
             switch (l.content) {
-                .Paragraph, .Heading, .Alert => {
+                .paragraph, .heading, .alert => {
                     for (l.inlines.items) |inl| {
                         switch (inl.content) {
                             .link => |link| {
@@ -530,8 +530,8 @@ test extractLinksFromDocument {
 /// Given a Heading node, create a ListItem Block containing a Link to that heading
 /// (The Link is an Inline inside a Paragraph Leaf Block)
 fn getListItemForHeading(io: std.Io, alloc: Allocator, H: leaves.Heading, depth: usize) !Block {
-    var block = Block.initContainer(alloc, .ListItem, depth);
-    var text = Block.initLeaf(alloc, .Paragraph, depth);
+    var block = Block.initContainer(alloc, .list_item, depth);
+    var text = Block.initLeaf(alloc, .paragraph, depth);
 
     // HTML-encode the text and also create a URI string from it
     const new_text = try htmlEncode(alloc, H.text);
@@ -548,7 +548,7 @@ fn getListItemForHeading(io: std.Io, alloc: Allocator, H: leaves.Heading, depth:
 
     // Create an Inline to hold the Link; add it to the Paragraph and the ListItem
     const inl = inls.Inline.initWithContent(alloc, .{ .link = link });
-    try text.leaf().addInline(inl);
+    try text.leaf.addInline(inl);
     try block.addChild(text);
 
     return block;
@@ -691,16 +691,16 @@ test pathToUri {
 /// If the first child of the document is not a level 1 Heading, return null.
 pub fn getDocumentTitle(block: *const Block) ?[]const u8 {
     if (!block.isContainer()) return null;
-    if (block.Container.content != .Document) return null;
+    if (block.container.content != .document) return null;
 
-    const children = block.Container.children.items;
+    const children = block.container.children.items;
     if (children.len < 1) return null;
 
     const first_child = children[0];
     if (!first_child.isLeaf()) return null;
-    if (first_child.Leaf.content != .Heading) return null;
+    if (first_child.leaf.content != .heading) return null;
 
-    const heading = first_child.Leaf.content.Heading;
+    const heading = first_child.leaf.content.heading;
     if (heading.level != 1) return null;
 
     return heading.text;
@@ -843,33 +843,33 @@ test generateTableOfContents {
     const io = std.testing.io;
 
     // Create the Document root
-    var root = Block.initContainer(alloc, .Document, 0);
+    var root = Block.initContainer(alloc, .document, 0);
     defer root.deinit();
 
     // Create an H1
-    var h1 = Block.initLeaf(alloc, .Heading, 0);
-    h1.leaf().content.Heading.text = try alloc.dupe(u8, "Heading 1");
-    h1.leaf().content.Heading.level = 1;
+    var h1 = Block.initLeaf(alloc, .heading, 0);
+    h1.leaf.content.heading.text = try alloc.dupe(u8, "Heading 1");
+    h1.leaf.content.heading.level = 1;
 
     // Create an H2
-    var h2 = Block.initLeaf(alloc, .Heading, 0);
-    h2.leaf().content.Heading.text = try alloc.dupe(u8, "Heading 2");
-    h2.leaf().content.Heading.level = 2;
+    var h2 = Block.initLeaf(alloc, .heading, 0);
+    h2.leaf.content.heading.text = try alloc.dupe(u8, "Heading 2");
+    h2.leaf.content.heading.level = 2;
 
     // Create an H3
-    var h3 = Block.initLeaf(alloc, .Heading, 0);
-    h3.leaf().content.Heading.text = try alloc.dupe(u8, "Heading 3");
-    h3.leaf().content.Heading.level = 3;
+    var h3 = Block.initLeaf(alloc, .heading, 0);
+    h3.leaf.content.heading.text = try alloc.dupe(u8, "Heading 3");
+    h3.leaf.content.heading.level = 3;
 
     // Create another H2
-    var h22 = Block.initLeaf(alloc, .Heading, 0);
-    h22.leaf().content.Heading.text = try alloc.dupe(u8, "Heading 2-2");
-    h22.leaf().content.Heading.level = 2;
+    var h22 = Block.initLeaf(alloc, .heading, 0);
+    h22.leaf.content.heading.text = try alloc.dupe(u8, "Heading 2-2");
+    h22.leaf.content.heading.level = 2;
 
     // Create another H1
-    var h12 = Block.initLeaf(alloc, .Heading, 0);
-    h12.leaf().content.Heading.text = try alloc.dupe(u8, "Heading 1-2");
-    h12.leaf().content.Heading.level = 1;
+    var h12 = Block.initLeaf(alloc, .heading, 0);
+    h12.leaf.content.heading.text = try alloc.dupe(u8, "Heading 1-2");
+    h12.leaf.content.heading.level = 1;
 
     // Assign all Headings to the Document
     try root.addChild(h1);
@@ -890,34 +890,34 @@ test generateTableOfContents {
     toc.print(1);
 
     const expected =
-        \\│ Container: open: false, type: List with 2 children
+        \\│ Container: open: false, type: list with 2 children
         \\│ │ List Spacing: 0
-        \\│ │ Container: open: false, type: ListItem with 2 children
-        \\│ │ │ Leaf: open: false, type: Paragraph
+        \\│ │ Container: open: false, type: list_item with 2 children
+        \\│ │ │ Leaf: open: false, type: paragraph
         \\│ │ │ │ Inline content:
         \\│ │ │ │ │ Link:
         \\│ │ │ │ │ │ Text: 'Heading 1' [line: 0, col: 0]
-        \\│ │ │ Container: open: false, type: List with 2 children
+        \\│ │ │ Container: open: false, type: list with 2 children
         \\│ │ │ │ List Spacing: 0
-        \\│ │ │ │ Container: open: false, type: ListItem with 2 children
-        \\│ │ │ │ │ Leaf: open: false, type: Paragraph
+        \\│ │ │ │ Container: open: false, type: list_item with 2 children
+        \\│ │ │ │ │ Leaf: open: false, type: paragraph
         \\│ │ │ │ │ │ Inline content:
         \\│ │ │ │ │ │ │ Link:
         \\│ │ │ │ │ │ │ │ Text: 'Heading 2' [line: 0, col: 0]
-        \\│ │ │ │ │ Container: open: false, type: List with 1 children
+        \\│ │ │ │ │ Container: open: false, type: list with 1 children
         \\│ │ │ │ │ │ List Spacing: 0
-        \\│ │ │ │ │ │ Container: open: false, type: ListItem with 1 children
-        \\│ │ │ │ │ │ │ Leaf: open: false, type: Paragraph
+        \\│ │ │ │ │ │ Container: open: false, type: list_item with 1 children
+        \\│ │ │ │ │ │ │ Leaf: open: false, type: paragraph
         \\│ │ │ │ │ │ │ │ Inline content:
         \\│ │ │ │ │ │ │ │ │ Link:
         \\│ │ │ │ │ │ │ │ │ │ Text: 'Heading 3' [line: 0, col: 0]
-        \\│ │ │ │ Container: open: false, type: ListItem with 1 children
-        \\│ │ │ │ │ Leaf: open: false, type: Paragraph
+        \\│ │ │ │ Container: open: false, type: list_item with 1 children
+        \\│ │ │ │ │ Leaf: open: false, type: paragraph
         \\│ │ │ │ │ │ Inline content:
         \\│ │ │ │ │ │ │ Link:
         \\│ │ │ │ │ │ │ │ Text: 'Heading 2-2' [line: 0, col: 0]
-        \\│ │ Container: open: false, type: ListItem with 1 children
-        \\│ │ │ Leaf: open: false, type: Paragraph
+        \\│ │ Container: open: false, type: list_item with 1 children
+        \\│ │ │ Leaf: open: false, type: paragraph
         \\│ │ │ │ Inline content:
         \\│ │ │ │ │ Link:
         \\│ │ │ │ │ │ Text: 'Heading 1-2' [line: 0, col: 0]
