@@ -539,15 +539,18 @@ fn getListItemForHeading(io: std.Io, alloc: Allocator, H: leaves.Heading, depth:
 
     // Create the Link object
     var link = inls.Link{
-        .alloc = alloc,
         .url = url,
         .text = .empty,
         .heap_url = true,
     };
-    try link.text.append(alloc, inls.Text{ .alloc = alloc, .text = new_text, .style = .{ .bold = true } });
+    try link.text.append(alloc, inls.Text{
+        .text = new_text,
+        .heap_text = true,
+        .style = .{ .bold = true },
+    });
 
     // Create an Inline to hold the Link; add it to the Paragraph and the ListItem
-    const inl = inls.Inline.initWithContent(alloc, .{ .link = link });
+    const inl = inls.Inline.initWithContent(.{ .link = link });
     try text.leaf.addInline(inl);
     try block.addChild(text);
 

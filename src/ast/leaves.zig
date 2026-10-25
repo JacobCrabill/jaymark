@@ -36,12 +36,12 @@ pub const LeafData = union(LeafType) {
     paragraph: void,
     // reference: Reference,
 
-    pub fn deinit(self: *LeafData) void {
+    pub fn deinit(self: *LeafData, gpa: Allocator) void {
         switch (self.*) {
-            .heading => |*h| h.deinit(),
-            .code => |*c| c.deinit(),
-            // .directive => |*d| d.deinit(),
-            .alert => |*a| a.deinit(),
+            .heading => |*h| h.deinit(gpa),
+            .code => |*c| c.deinit(gpa),
+            // .directive => |*d| d.deinit(gpa),
+            .alert => |*a| a.deinit(gpa),
             inline else => {},
         }
     }
@@ -59,16 +59,11 @@ pub const LeafData = union(LeafType) {
 
 /// A heading with associated level
 pub const Heading = struct {
-    alloc: Allocator = undefined,
     level: u8 = 1,
     text: []const u8 = undefined,
 
-    pub fn init(alloc: Allocator) Heading {
-        return .{ .alloc = alloc };
-    }
-
-    pub fn deinit(h: *Heading) void {
-        h.alloc.free(h.text);
+    pub fn deinit(h: *Heading, gpa: Allocator) void {
+        gpa.free(h.text);
     }
 
     pub fn print(h: Heading, depth: u8) void {
@@ -80,20 +75,15 @@ pub const Heading = struct {
 /// Raw code or other preformatted content
 /// TODO: Split into "Code" and "Directive" to have explicit "Directive" types
 pub const Code = struct {
-    alloc: Allocator = undefined,
     // The opening tag, e.g. "```", that has to be matched to end the block
     opener: ?[]const u8 = null,
     tag: ?[]const u8 = null,
     directive: ?[]const u8 = null,
     text: ?[]const u8 = "",
 
-    pub fn init(alloc: Allocator) Code {
-        return .{ .alloc = alloc };
-    }
-
-    pub fn deinit(c: *Code) void {
-        if (c.tag) |tag| c.alloc.free(tag);
-        if (c.text) |text| c.alloc.free(text);
+    pub fn deinit(c: *Code, gpa: Allocator) void {
+        if (c.tag) |tag| gpa.free(tag);
+        if (c.text) |text| gpa.free(text);
     }
 
     pub fn print(c: Code, depth: u8) void {
@@ -109,18 +99,13 @@ pub const Code = struct {
 /// Directive or Admonition box
 /// This is still TODO. Similar to the Alert, but using the fenced-block syntax.
 pub const Directive = struct {
-    alloc: Allocator = undefined,
     // The opening tag, e.g. "```", that has to be matched to end the block
     opener: ?[]const u8 = null,
     directive: ?[]const u8 = null,
 
-    pub fn init(alloc: Allocator) Directive {
-        return .{ .alloc = alloc };
-    }
-
-    pub fn deinit(c: *Directive) void {
-        if (c.directive) |directive| c.alloc.free(directive);
-        if (c.text) |text| c.alloc.free(text);
+    pub fn deinit(c: *Directive, gpa: Allocator) void {
+        if (c.directive) |directive| gpa.free(directive);
+        if (c.text) |text| gpa.free(text);
     }
 
     pub fn print(c: Directive, depth: u8) void {
@@ -133,15 +118,10 @@ pub const Directive = struct {
 
 /// Github Flavored Markdown Alert
 pub const Alert = struct {
-    alloc: Allocator = undefined,
     alert: ?[]const u8 = null,
 
-    pub fn init(alloc: Allocator) Alert {
-        return .{ .alloc = alloc };
-    }
-
-    pub fn deinit(a: *Alert) void {
-        if (a.alert) |alert| a.alloc.free(alert);
+    pub fn deinit(a: *Alert, gpa: Allocator) void {
+        if (a.alert) |alert| gpa.free(alert);
     }
 
     pub fn print(a: Alert, depth: u8) void {

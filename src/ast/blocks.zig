@@ -154,7 +154,7 @@ pub const Container = struct {
             .quote => ContainerData{ .quote = {} },
             .list => ContainerData{ .list = containers.List{} },
             .list_item => ContainerData{ .list_item = containers.ListItem{} },
-            .table => ContainerData{ .table = containers.Table{ .gpa = alloc } },
+            .table => ContainerData{ .table = containers.Table{} },
         };
 
         return block;
@@ -166,13 +166,14 @@ pub const Container = struct {
         }
         self.children.deinit(self.alloc);
 
-        switch (self.content) {
-            .table => |*t| {
-                t.relative_width.deinit(t.gpa);
-                t.alignment.deinit(t.gpa);
-            },
-            else => {},
-        }
+        // TODO: Reconsider table col alignment
+        // switch (self.content) {
+        //     .table => |*t| {
+        //         t.relative_width.deinit(self.alloc);
+        //         t.alignment.deinit(self.alloc);
+        //     },
+        //     else => {},
+        // }
     }
 
     pub fn addChild(self: *Self, child: Block) !void {
@@ -209,21 +210,21 @@ pub const Container = struct {
                 debug.printIndent(depth + 1);
                 debug.print("List Spacing: {d}\n", .{l.spacing});
             },
-            .table => |t| {
-                debug.printIndent(depth + 1);
-                debug.print("Table: Column alignment:", .{});
-                for (t.alignment.items) |a| {
-                    debug.print(" {t}", .{a});
-                }
-                debug.print("\n", .{});
+            // .table => |t| {
+            //     debug.printIndent(depth + 1);
+            //     debug.print("Table: Column alignment:", .{});
+            //     for (t.alignment.items) |a| {
+            //         debug.print(" {t}", .{a});
+            //     }
+            //     debug.print("\n", .{});
 
-                debug.printIndent(depth + 1);
-                debug.print("Table: Relative column widths:", .{});
-                for (t.relative_width.items) |w| {
-                    debug.print(" {d}", .{w});
-                }
-                debug.print("\n", .{});
-            },
+            //     debug.printIndent(depth + 1);
+            //     debug.print("Table: Relative column widths:", .{});
+            //     for (t.relative_width.items) |w| {
+            //         debug.print(" {d}", .{w});
+            //     }
+            //     debug.print("\n", .{});
+            // },
             else => {},
         }
 
@@ -251,10 +252,10 @@ pub const Leaf = struct {
             .start_col = col,
             .content = blk: {
                 switch (kind) {
-                    .alert => break :blk .{ .alert = leaves.Alert.init(alloc) },
+                    .alert => break :blk .{ .alert = .{} },
                     .linebreak => break :blk .{ .linebreak = {} },
-                    .code => break :blk .{ .code = leaves.Code.init(alloc) },
-                    .heading => break :blk .{ .heading = leaves.Heading.init(alloc) },
+                    .code => break :blk .{ .code = .{} },
+                    .heading => break :blk .{ .heading = .{} },
                     .paragraph => break :blk .{ .paragraph = {} },
                 }
             },
@@ -262,10 +263,10 @@ pub const Leaf = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.content.deinit();
+        self.content.deinit(self.alloc);
         self.raw_contents.deinit(self.alloc);
         for (self.inlines.items) |*item| {
-            item.deinit();
+            item.deinit(self.alloc);
         }
         self.inlines.deinit(self.alloc);
     }
@@ -276,12 +277,12 @@ pub const Leaf = struct {
 
     /// Append a chunk of Text to our inlines
     pub fn addText(self: *Self, text: Text) !void {
-        try self.inlines.append(self.alloc, Inline.initWithContent(self.alloc, .{ .text = text }));
+        try self.inlines.append(self.alloc, Inline.initWithContent(.{ .text = text }));
     }
 
     /// Append a Link to the contents Paragraph
     pub fn addLink(self: *Self, link: Link) !void {
-        try self.inlines.append(self.alloc, Inline.initWithContent(self.alloc, .{ .link = link }));
+        try self.inlines.append(self.alloc, Inline.initWithContent(.{ .link = link }));
     }
 
     pub fn close(self: *Self) void {
@@ -387,7 +388,7 @@ fn createTestAst(alloc: Allocator) !Block {
     text3.style.italic = true;
 
     // Create a Link
-    var link = inls.Link.init(alloc);
+    var link: inls.Link = .{};
     link.url = "www.google.com";
     try link.text.append(alloc, Text{ .text = "Google", .style = .{ .underline = true } });
 
@@ -466,8 +467,6 @@ test "Print basic AST" {
         \\│ │ │ │ │ │ Link:
         \\│ │ │ │ │ │ │ Text: 'Google' [line: 0, col: 0]
         \\│ │ Container: open: true, type: table with 2 children
-        \\│ │ │ Table: Column alignment:
-        \\│ │ │ Table: Relative column widths:
         \\│ │ │ Leaf: open: true, type: paragraph
         \\│ │ │ │ Inline content:
         \\│ │ │ │ │ Text: 'Hello, ' [line: 0, col: 0]
@@ -482,15 +481,21 @@ test "Print basic AST" {
 test "sizeof(Block)" {
     if (@import("builtin").mode == .debug) {
         // Results of swapping array_list.Managed -> ArrayList:
-        // 224 -> 192
-        try std.testing.expectEqual(192, @sizeOf(Block));
+        // Then of removing the stored `alloc` in all nested types:
+        // 224 -> 192 -> 176
+        try std.testing.expectEqual(176, @sizeOf(Block));
 
-        // 184 -> 168
-        try std.testing.expectEqual(168, @sizeOf(Container));
+        // 184 -> 168 -> 152 -> 88
+        try std.testing.expectEqual(88, @sizeOf(Container));
 
-        // 216 -> 184
-        try std.testing.expectEqual(184, @sizeOf(Leaf));
-        try std.testing.expectEqual(88, @sizeOf(LeafData));
+        // 216 -> 184 -> 168
+        try std.testing.expectEqual(168, @sizeOf(Leaf));
+
+        // 88 -> 72
+        try std.testing.expectEqual(72, @sizeOf(LeafData));
         try std.testing.expectEqual(32, @sizeOf(ArrayList(Token)));
+
+        // 80 -> 64
+        try std.testing.expectEqual(64, @sizeOf(leaves.Code));
     }
 }

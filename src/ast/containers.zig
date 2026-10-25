@@ -24,18 +24,18 @@ pub const ContainerData = union(ContainerType) {
 /// store the list items for simplicity, as the ListItems are Container blocks
 /// which can hold any kind of Block.
 pub const List = struct {
-    pub const Kind = enum {
+    pub const Kind = enum(u8) {
         unordered,
         ordered,
         task,
     };
-    kind: Kind = .unordered,
     /// Starting number, if ordered list
     start: usize = 1,
     /// Line spacing (Number of blank lines between each item)
     spacing: u8 = 0,
     /// State necessary for parsing ambiguous whitespace
     _current_break_count: u8 = 0,
+    kind: Kind = .unordered,
 };
 
 /// Single ListItem - Only needed for Task lists
@@ -47,11 +47,10 @@ pub const ListItem = struct {
 pub const Table = struct {
     ncol: usize = 0,
     row: usize = 0,
-    gpa: std.mem.Allocator,
-    /// Relative width (fraction of total amount) that each column should take up.
-    relative_width: std.ArrayList(u8) = .empty,
-    /// Text alignment of each column.
-    alignment: std.ArrayList(Align) = .empty,
+    // /// Relative width (fraction of total amount) that each column should take up.
+    // relative_width: std.ArrayList(u8) = .empty,
+    // /// Text alignment of each column.
+    // alignment: std.ArrayList(Align) = .empty,
 
     pub const Align = enum(u8) {
         left,

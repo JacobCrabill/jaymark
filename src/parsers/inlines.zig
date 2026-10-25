@@ -218,13 +218,10 @@ pub const InlineParser = struct {
                             const new_text_ws = std.mem.collapseRepeats(u8, new_text, ' ');
 
                             const codespan = inls.Codespan{
-                                .alloc = self.alloc,
                                 .text = try self.alloc.dupe(u8, new_text_ws),
+                                .heap_text = true,
                             };
-                            try inlines.append(self.alloc, Inline.initWithContent(
-                                self.alloc,
-                                inls.InlineData{ .codespan = codespan },
-                            ));
+                            try inlines.append(self.alloc, Inline.initWithContent(.{ .codespan = codespan }));
                         }
 
                         i = end;
@@ -251,14 +248,10 @@ pub const InlineParser = struct {
                             defer self.alloc.free(new_text);
 
                             const autolink = inls.Autolink{
-                                .alloc = self.alloc,
                                 .url = try self.alloc.dupe(u8, new_text),
                                 .heap_url = true,
                             };
-                            try inlines.append(self.alloc, Inline.initWithContent(
-                                self.alloc,
-                                inls.InlineData{ .autolink = autolink },
-                            ));
+                            try inlines.append(self.alloc, Inline.initWithContent(.{ .autolink = autolink }));
                         }
 
                         i = end;
@@ -274,10 +267,7 @@ pub const InlineParser = struct {
                     try utils.appendSingleToken(self.alloc, &inlines, space_token, style);
                 },
                 .escaped => {
-                    try inlines.append(self.alloc, Inline.initWithContent(
-                        self.alloc,
-                        inls.InlineData{ .escaped = tok.text[1] },
-                    ));
+                    try inlines.append(self.alloc, Inline.initWithContent(.{ .escaped = tok.text[1] }));
                 },
                 .space => {
                     if (prev_type == .space or prev_type == .newline) continue;
@@ -370,9 +360,9 @@ pub const InlineParser = struct {
                     {
                         // Add the underscore as a regular character
                         const text = inls.Text{
-                            .alloc = self.alloc,
                             .style = style,
                             .text = try self.alloc.dupe(u8, tok.text),
+                            .heap_text = true,
                             .line = tok.src.row,
                             .col = tok.src.col,
                         };
@@ -388,9 +378,9 @@ pub const InlineParser = struct {
                         style.strike = true;
                     } else {
                         const text = inls.Text{
-                            .alloc = self.alloc,
                             .style = style,
                             .text = try self.alloc.dupe(u8, tok.text),
+                            .heap_text = true,
                             .line = tok.src.row,
                             .col = tok.src.col,
                         };
@@ -400,9 +390,9 @@ pub const InlineParser = struct {
                 .newline => {
                     // Treat line breaks as spaces; Don't clear the style
                     const text = inls.Text{
-                        .alloc = self.alloc,
                         .style = style,
                         .text = try self.alloc.dupe(u8, " "),
+                        .heap_text = true,
                         .line = tok.src.row,
                         .col = tok.src.col,
                     };
@@ -411,9 +401,9 @@ pub const InlineParser = struct {
                 else => {
                     // Add each token as its own Text object
                     const text = inls.Text{
-                        .alloc = self.alloc,
                         .style = style,
                         .text = try self.alloc.dupe(u8, tok.text),
+                        .heap_text = true,
                         .line = tok.src.row,
                         .col = tok.src.col,
                     };
@@ -431,7 +421,7 @@ pub const InlineParser = struct {
 
         var inl: Inline = undefined;
         if (bang) {
-            var img = inls.Image.init(self.alloc);
+            var img: inls.Image = .{};
             img.heap_src = true;
             img.src = try std.mem.concat(self.alloc, u8, uri_words.items);
             if (std.mem.startsWith(u8, img.src, "http") or std.mem.startsWith(u8, img.src, "www.")) {
@@ -457,13 +447,13 @@ pub const InlineParser = struct {
             }
 
             img.alt = link_text_block;
-            inl = Inline.initWithContent(self.alloc, .{ .image = img });
+            inl = Inline.initWithContent(.{ .image = img });
         } else {
-            var link = inls.Link.init(self.alloc);
+            var link: inls.Link = .{};
             link.heap_url = true;
             link.url = try std.mem.concat(self.alloc, u8, uri_words.items);
             link.text = link_text_block;
-            inl = Inline.initWithContent(self.alloc, .{ .link = link });
+            inl = Inline.initWithContent(.{ .link = link });
         }
         try inlines.append(self.alloc, inl);
 
@@ -498,7 +488,7 @@ test "lone tilde parses as literal text, not strikethrough" {
     const alloc = std.testing.allocator;
     var inlines = try parseInlinesFromStr(alloc, "~foo");
     defer {
-        for (inlines.items) |*inl| inl.deinit();
+        for (inlines.items) |*inl| inl.deinit(alloc);
         inlines.deinit(alloc);
     }
 
@@ -521,7 +511,7 @@ test "matched tildes produce strikethrough text" {
     const alloc = std.testing.allocator;
     var inlines = try parseInlinesFromStr(alloc, "~foo~");
     defer {
-        for (inlines.items) |*inl| inl.deinit();
+        for (inlines.items) |*inl| inl.deinit(alloc);
         inlines.deinit(alloc);
     }
 
@@ -545,7 +535,7 @@ test "first tilde pair is strikethrough, trailing lone tilde is literal" {
     // "~foo~" → struck; " ~bar" → plain with literal '~'
     var inlines = try parseInlinesFromStr(alloc, "~foo~ ~bar");
     defer {
-        for (inlines.items) |*inl| inl.deinit();
+        for (inlines.items) |*inl| inl.deinit(alloc);
         inlines.deinit(alloc);
     }
 

@@ -432,9 +432,9 @@ pub fn appendText(alloc: Allocator, text_parts: *ArrayList(Text), words: *ArrayL
 
         // End the current Text object with the current style
         const text = Text{
-            .alloc = alloc,
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
+            .heap_text = true,
         };
         try text_parts.append(alloc, text);
         words.clearRetainingCapacity();
@@ -458,9 +458,9 @@ pub fn appendTextWithPos(alloc: Allocator, text_parts: *ArrayList(Text), tokens:
 
         // End the current Text object with the current style and position info
         const text = Text{
-            .alloc = alloc,
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
+            .heap_text = true,
             .line = tokens[start].src.row,
             .col = tokens[start].src.col,
         };
@@ -479,11 +479,11 @@ pub fn appendWords(alloc: Allocator, inlines: *ArrayList(Inline), words: *ArrayL
 
         // End the current Text object with the current style
         const text = Text{
-            .alloc = alloc,
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
+            .heap_text = true,
         };
-        try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
+        try inlines.append(alloc, Inline.initWithContent(.{ .text = text }));
         words.clearRetainingCapacity();
     }
 }
@@ -506,26 +506,26 @@ pub fn appendWordsWithPos(alloc: Allocator, inlines: *ArrayList(Inline), tokens:
 
         // End the current Text object with the current style and position info
         const text = Text{
-            .alloc = alloc,
             .style = style,
             .text = try alloc.dupe(u8, new_text_ws),
+            .heap_text = true,
             .line = tokens[start].src.row,
             .col = tokens[start].src.col,
         };
-        try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
+        try inlines.append(alloc, Inline.initWithContent(.{ .text = text }));
     }
 }
 
 /// Append a single token as an Inline Text object, preserving position information
 pub fn appendSingleToken(alloc: Allocator, inlines: *ArrayList(Inline), token: Token, style: TextStyle) Allocator.Error!void {
     const text = Text{
-        .alloc = alloc,
         .style = style,
         .text = try alloc.dupe(u8, utils.trimLeadingWhitespace(token.text)),
+        .heap_text = true,
         .line = token.src.row,
         .col = token.src.col,
     };
-    try inlines.append(alloc, Inline.initWithContent(alloc, InlineData{ .text = text }));
+    try inlines.append(alloc, Inline.initWithContent(.{ .text = text }));
 }
 
 /// Check if the token slice contains a valid link of the form: [text](url).
