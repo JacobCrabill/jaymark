@@ -40,8 +40,10 @@ pub fn getStream() *std.Io.Writer {
     if (!stream_init) {
         @branchHint(.cold);
         if (!is_wasm) {
+            // TODO: This will not work - g_io is undefined!!
             file_stream = std.Io.File.stderr().writer(g_io, &write_buf);
             stream = &file_stream.interface;
+            @panic("debug.io is not set!");
         } else {
             // In WASM, fall back to discarding writer
             stream = &discarding_writer.writer;

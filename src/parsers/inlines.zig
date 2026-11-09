@@ -192,7 +192,7 @@ pub const InlineParser = struct {
                     const bang: bool = tok.kind == .bang;
                     const start: usize = if (bang) i + 1 else i;
                     if (utils.validateLink(tokens[start..])) {
-                        const n: usize = try self.parseLinkOrImage(&inlines, tokens[i..], bang);
+                        const n: usize = try self.parseLinkOrImage(&inlines, tokens[i..], bang, style);
                         i += n - 1;
                     } else {
                         try utils.appendSingleToken(self.alloc, &inlines, tok, style);
@@ -220,6 +220,7 @@ pub const InlineParser = struct {
                             const codespan = inls.Codespan{
                                 .text = try self.alloc.dupe(u8, new_text_ws),
                                 .heap_text = true,
+                                .style = style,
                             };
                             try inlines.append(self.alloc, Inline.initWithContent(.{ .codespan = codespan }));
                         }
@@ -286,7 +287,13 @@ pub const InlineParser = struct {
 
     /// Parse a Hyperlink (Image or normal Link)
     /// TODO: return Inline instead of taking *inlines
-    fn parseLinkOrImage(self: *Self, inlines: *ArrayList(Inline), tokens: []const Token, bang: bool) Allocator.Error!usize {
+    fn parseLinkOrImage(
+        self: *Self,
+        inlines: *ArrayList(Inline),
+        tokens: []const Token,
+        bang: bool,
+        outer_style: TextStyle,
+    ) Allocator.Error!usize {
         // If an image, skip the '!'; the rest should be a valid link
         const start: usize = if (bang) 1 else 0;
 
@@ -338,7 +345,8 @@ pub const InlineParser = struct {
         var link_text_block: std.ArrayList(inls.Text) = .empty;
 
         // Process each token in the link text individually to preserve position information
-        var style = TextStyle{};
+        // Link text inherits the style of the surrounding text (e.g. a link within bold text)
+        var style = outer_style;
 
         var i: usize = 0;
         while (i < alt_text.len) : (i += 1) {
@@ -447,12 +455,14 @@ pub const InlineParser = struct {
             }
 
             img.alt = link_text_block;
+            img.style = outer_style;
             inl = Inline.initWithContent(.{ .image = img });
         } else {
             var link: inls.Link = .{};
             link.heap_url = true;
             link.url = try std.mem.concat(self.alloc, u8, uri_words.items);
             link.text = link_text_block;
+            link.style = outer_style;
             inl = Inline.initWithContent(.{ .link = link });
         }
         try inlines.append(self.alloc, inl);

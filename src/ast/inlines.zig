@@ -133,7 +133,10 @@ pub const Text = struct {
 pub const Link = struct {
     url: []const u8 = undefined,
     text: std.ArrayList(Text) = .empty,
-    heap_url: bool = false, // Whether the URL string has been Heap-allocated
+    /// Whether the URL string has been Heap-allocated
+    heap_url: bool = false,
+    /// The style of the surrounding text (inherited by 'text')
+    style: TextStyle = .{},
 
     pub fn deinit(self: *Link, gpa: Allocator) void {
         for (self.text.items) |*text| {
@@ -161,6 +164,7 @@ pub const Link = struct {
 pub const Codespan = struct {
     text: []const u8 = "",
     heap_text: bool = false,
+    style: TextStyle = .{}, // The style of the surrounding text (e.g. bold)
 
     pub fn deinit(self: *Codespan, gpa: Allocator) void {
         if (self.heap_text) {
@@ -174,9 +178,14 @@ pub const Codespan = struct {
 pub const Image = struct {
     src: []const u8 = "",
     alt: std.ArrayList(Text) = .empty,
-    kind: Kind = .local, // Local file, or web URL
+    /// Local file, or web URL
+    kind: Kind = .local,
+    /// Image format
     format: Format = .other,
-    heap_src: bool = false, // Whether the src string has been heap-allocated
+    /// Whether the src string has been heap-allocated
+    heap_src: bool = false,
+    /// The style of the surrounding text (inherited by 'text')
+    style: TextStyle = .{},
 
     pub const Format = enum(u8) {
         /// PNG file that can be directly sent to the terminal with the Kitty Graphics Protocol

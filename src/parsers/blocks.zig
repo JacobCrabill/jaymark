@@ -430,12 +430,15 @@ pub const Parser = struct {
         // Check for an open child
         if (cblock.children.items.len > 0) {
             const child: *Block = &cblock.children.items[cblock.children.items.len - 1];
-            if (self.handleLine(child, trimmed_line)) {
-                self.logger.log("Quote child handled line\n", .{});
-                return true;
-            } else {
-                self.logger.log("Quote child cannot handle line\n", .{});
-                self.closeBlock(child);
+            // Note: Some children (e.g. Headings) close themselves immediately
+            if (child.isOpen()) {
+                if (self.handleLine(child, trimmed_line)) {
+                    self.logger.log("Quote child handled line\n", .{});
+                    return true;
+                } else {
+                    self.logger.log("Quote child cannot handle line\n", .{});
+                    self.closeBlock(child);
+                }
             }
         }
 
@@ -851,12 +854,30 @@ pub const Parser = struct {
 
         // Append all of the current line's tokens to the block's raw_contents
         // Check if we have the closing code block token on this line
+        //
+        // We use the full line (rather than 'line') in order to preserve any indentation which
+        // our parent containers may have trimmed. However, any non-whitespace tokens which were
+        // trimmed (e.g. the '>' of a parent Quote block) are container markers, not code.
+        const prefix_len: usize = blk: {
+            const cur = self.cur_line;
+            const line_end = @intFromPtr(line.ptr + line.len);
+            const cur_end = @intFromPtr(cur.ptr + cur.len);
+            if (line.len <= cur.len and line_end == cur_end) break :blk cur.len - line.len;
+            break :blk 0;
+        };
+
         var have_closer: bool = false;
-        for (self.cur_line) |tok| {
+        for (self.cur_line, 0..) |tok, i| {
             if (tok.kind == .directive and std.mem.eql(u8, tok.text, code.opener.?)) {
                 have_closer = true;
                 self.logger.log("Closing current code block\n", .{});
                 break;
+            }
+
+            // Skip any container markers trimmed by our parent blocks
+            if (i < prefix_len and !utils.isWhitespace(tok.kind)) {
+                self.logger.log("Skipping container token '{s}' in code block\n", .{tok.text});
+                continue;
             }
 
             // Don't append any leading whitespace prior to the start column of the block

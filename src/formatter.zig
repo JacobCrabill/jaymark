@@ -181,6 +181,26 @@ pub const Formatter = struct {
         self.startStyle(.{ .bold = false, .italic = false, .strike = false });
     }
 
+    /// End any active style flags which are not also set in 'style',
+    /// without starting any new ones
+    fn endStylesNotIn(self: *Self, style: TextStyle) void {
+        var common = self.cur_style;
+        common.bold = common.bold and style.bold;
+        common.italic = common.italic and style.italic;
+        common.strike = common.strike and style.strike;
+        self.startStyle(common);
+    }
+
+    /// The number of marker characters needed to start the flags in 'style'
+    /// which are not currently active
+    fn startStyleWidth(self: *Self, style: TextStyle) usize {
+        var n: usize = 0;
+        if (style.bold and !self.cur_style.bold) n += 2;
+        if (style.italic and !self.cur_style.italic) n += 1;
+        if (style.strike and !self.cur_style.strike) n += 1;
+        return n;
+    }
+
     /// Write an array of bytes to the underlying writer, and update the current column
     fn write(self: *Self, bytes: []const u8) void {
         const stream: *Writer = switch (self.mode) {
@@ -339,14 +359,12 @@ pub const Formatter = struct {
 
     /// Write the row leaders
     fn writeLeaders(self: *Self) void {
-        const style = self.cur_style;
-        self.resetStyle();
+        // Note: Leaders are always unstyled, and Markdown emphasis may span
+        // line breaks, so we must not emit any style markers here. Any active
+        // style markers are already embedded in the text being wrapped.
         for (self.leader_stack.items) |text| {
-            self.startStyle(text.style);
             self.write(text.text);
-            self.resetStyle();
         }
-        self.startStyle(style);
     }
 
     /// Get the width of the current leader_stack
@@ -424,14 +442,25 @@ pub const Formatter = struct {
 
         self.write(quote_indent.text);
 
-        for (block.children.items, 0..) |child, i| {
-            try self.renderBlock(child);
-            if (i < block.children.items.len - 1) {
-                // Add a blank line in between children
-                self.renderBreak();
+        // Like the Document, we separate each child block with a single blank line.
+        // Break children are ignored, since the parser doesn't consistently produce
+        // them (e.g. the blank line after a List is consumed by the List).
+        var first: bool = true;
+        for (block.children.items) |child| {
+            if (blocks.isBreak(child)) continue;
+
+            if (!first) {
+                // End the current line, if needed, and add a blank line
+                if (self.column > self.opts.indent) self.renderBreak();
                 self.writeLeaders();
-                self.needs_leaders = false;
+                self.renderBreak();
+                // Let the next child write the leaders: Blocks like lists and tables
+                // will otherwise see a non-zero column and insert an extra line break.
+                self.needs_leaders = true;
             }
+            first = false;
+
+            try self.renderBlock(child);
         }
     }
 
@@ -656,14 +685,13 @@ pub const Formatter = struct {
 
     /// Render a single line break
     fn renderBreak(self: *Self) void {
-        // Some styles fill the remainder of the line, even after a '\n'
-        // Reset all styles before wrting the newline and indent
-        const cur_style = self.cur_style;
-        self.resetStyle();
+        // Unlike the console renderer, we must not end/restart styles around
+        // the newline: Markdown emphasis may span soft line breaks, and when
+        // wrapping pre-rendered text the style markers are already embedded
+        // in the text (so 'cur_style' does not reflect the wrap position).
         self.writeno("\n");
         self.column = 0;
         self.writeNTimes(" ", self.opts.indent);
-        self.startStyle(cur_style);
     }
 
     /// Render an ATX Heading
@@ -682,7 +710,10 @@ pub const Formatter = struct {
 
         self.leader_stack.append(self.alloc, header_indent) catch unreachable;
 
-        self.writeLeaders();
+        // The parent leaders (e.g. quote or list indents) have already been written;
+        // just write the heading marker. All leaders are used if we wrap the heading.
+        self.write(header_indent.text);
+
         self.needs_leaders = false;
 
         // Override the indent level for the purpose of text wrapping
@@ -796,6 +827,11 @@ pub const Formatter = struct {
         // so we must first dump the scratch buffer and then render
         // the codespan independently to the normal buffer.
         const cur_mode = self.mode;
+
+        // End any styles not applied to the codespan _before_ the separating space,
+        // e.g. "**bold** `code`" rather than "**bold `code`**"
+        self.endStylesNotIn(code.style);
+
         if (cur_mode == .scratch) {
             self.dumpScratchBuffer();
         }
@@ -803,7 +839,8 @@ pub const Formatter = struct {
 
         if (self.column > self.opts.indent) {
             // The 3 is for one " " + two "`"
-            if (self.column + code.text.len + 3 + self.opts.indent > self.opts.width) {
+            const width = code.text.len + 3 + self.startStyleWidth(code.style);
+            if (self.column + width + self.opts.indent > self.opts.width) {
                 self.renderBreak();
                 self.writeLeaders();
             } else if (self.writer.written().len > 0) {
@@ -815,6 +852,10 @@ pub const Formatter = struct {
                 }
             }
         }
+
+        // Start any styles applied to the codespan _after_ the separating space,
+        // e.g. "text **`code`**" rather than "text** `code`**"
+        self.startStyle(code.style);
 
         self.write("`");
         self.write(code.text);
@@ -829,7 +870,21 @@ pub const Formatter = struct {
     }
 
     fn renderLink(self: *Self, link: inls.Link) void {
+        self.renderLinkImpl("[", link.text.items, link.url, link.style);
+    }
+
+    fn renderImage(self: *Self, image: inls.Image) void {
+        self.renderLinkImpl("![", image.alt.items, image.src, image.style);
+    }
+
+    /// Render a link or image as an unbreakable unit:
+    /// '{opener}{text}](url)', with the given surrounding style
+    fn renderLinkImpl(self: *Self, opener: []const u8, text_items: []const Text, url: []const u8, style: TextStyle) void {
         const cur_mode = self.mode;
+
+        // End any styles not applied to the link before the separating space
+        self.endStylesNotIn(style);
+
         if (cur_mode == .scratch) {
             self.dumpScratchBuffer();
         }
@@ -837,14 +892,18 @@ pub const Formatter = struct {
         // First, render to the scratch buffer so we know how long the whole link is
         self.mode = .scratch;
 
-        self.write("[");
-        for (link.text.items) |text| {
+        // Start any styles applied to the whole link (e.g. "**[link](url)**")
+        self.startStyle(style);
+
+        self.write(opener);
+        for (text_items) |text| {
             self.renderText(text);
         }
-        self.resetStyle();
+        // Return to the link's (surrounding) style before closing the link text
+        self.startStyle(style);
 
         self.write("](");
-        self.write(link.url);
+        self.write(url);
         self.write(")");
 
         // Next, write the link all at once to the normal buffer
@@ -873,24 +932,6 @@ pub const Formatter = struct {
         // Reset
         self.scratch.clearRetainingCapacity();
         self.mode = cur_mode;
-    }
-
-    fn renderImage(self: *Self, image: inls.Image) void {
-        if (self.mode == .scratch) {
-            self.dumpScratchBuffer();
-        }
-        self.write("![");
-        for (image.alt.items) |text| {
-            self.renderText(text);
-        }
-
-        self.write("](");
-        self.write(image.src);
-        self.write(")");
-
-        if (self.mode == .scratch) {
-            self.dumpScratchBuffer();
-        }
     }
 
     fn dumpScratchBuffer(self: *Self) void {
@@ -1311,6 +1352,107 @@ test "Formatter" {
             \\  | A  | B  | C  | D  |
             \\
             ,
+        },
+        // Regression: wrapping text before a styled run containing a codespan
+        // must not inject extra style markers at the line break
+        .{
+            .input =
+            \\- Binary adapter — a generated that re-exposes the prebuilt files from the foo.
+            \\  Crucially the adapter carries the **same `.fingerprint`** as the source package (copied
+            ,
+            .output =
+            \\- Binary adapter — a generated that re-exposes the prebuilt files from the foo.
+            \\  Crucially the adapter carries the **same `.fingerprint`** as the source package (copied
+            \\
+            ,
+        },
+        // Regression: emphasis spanning a wrapped line must not be closed/reopened
+        .{
+            .input = "aaaa bbbb **cccc dddd eeee** ffff",
+            .output = "aaaa bbbb **cccc\ndddd eeee** ffff\n",
+            .width = 18,
+        },
+        // Regression: emphasis around / adjacent to codespans
+        .{
+            .input = "**`code`** and _`ital`_ and **a** `c` and (**`p`**) and **x `c` y**",
+            .output = "**`code`** and _`ital`_ and **a** `c` and (**`p`**) and **x `c` y**\n",
+        },
+        // Regression: emphasis around / adjacent to links and images
+        .{
+            .input = "**bold [link](u) more** and **[l](u)** and **x [_it_ y](u) z** and [**b** t](u)",
+            .output = "**bold [link](u) more** and **[l](u)** and **x [_it_ y](u) z** and [**b** t](u)\n",
+        },
+        // Regression: Headings inside Quotes / Lists (previously crashed the parser
+        // when followed by another quote line, and duplicated the leaders)
+        .{
+            .input =
+            \\> # Head
+            \\>
+            \\> after
+            \\
+            \\- > ## In list
+            \\  > text
+            \\
+            \\- # Plain
+            ,
+            .output =
+            \\> # Head
+            \\>
+            \\> after
+            \\
+            \\- > ## In list
+            \\  >
+            \\  > text
+            \\
+            \\- # Plain
+            \\
+            ,
+        },
+        // Regression: Quote children are separated by exactly one blank line (idempotent),
+        // including Lists (which consume the trailing blank line) and Code blocks
+        .{
+            .input =
+            \\> Quote Block
+            \\>
+            \\> > With line breaks
+            \\>
+            \\>
+            \\> - Lists inside quotes
+            \\>
+            \\> 1. Numbered
+            \\>
+            \\> ```c
+            \\> int x;
+            \\>   y;
+            \\> ```
+            \\>
+            \\> | a | b |
+            \\> | - | - |
+            \\> | 1 | 2 |
+            ,
+            .output =
+            \\> Quote Block
+            \\>
+            \\> > With line breaks
+            \\>
+            \\> - Lists inside quotes
+            \\>
+            \\> 1. Numbered
+            \\>
+            \\> ```c
+            \\> int x;
+            \\>   y;
+            \\> ```
+            \\>
+            \\> | a | b |
+            \\> | - | - |
+            \\> | 1 | 2 |
+            \\
+            ,
+        },
+        .{
+            .input = "Image: ![alt](img.png) and **![alt](img.png)** and ![**alt**](img.png)",
+            .output = "Image: ![alt](img.png) and **![alt](img.png)** and ![**alt**](img.png)\n",
         },
     };
 
