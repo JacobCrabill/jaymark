@@ -889,7 +889,7 @@ test generateTableOfContents {
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
 
-    debug.init(io, &writer.writer);
+    debug.init(&writer.writer);
     toc.print(1);
 
     const expected =

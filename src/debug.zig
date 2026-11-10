@@ -12,64 +12,37 @@ pub const is_wasm = switch (@import("builtin").cpu.arch) {
 
 /// Discarding writer to silently drop all log messages.
 /// Useful in WASM environments or other bare-metal envs without libc, stderr, etc.
+/// Used as the default writer if none provided.
 var discarding_writer: std.Io.Writer.Discarding = .init(&.{});
 
 /// Global debug stream instance.
 /// Intended to be set once from main() via init().
 var stream: *std.Io.Writer = &discarding_writer.writer;
-var file_stream: std.Io.File.Writer = undefined;
-var write_buf: [1024]u8 = undefined;
-var stream_init: bool = false;
-
-/// Global IO instance.
-var g_io: std.Io = undefined;
 
 /// Set the global debug output stream.
 ///
 /// This can be, for example, a buffered writer for use in tests.
-pub fn init(in_io: std.Io, out_stream: *std.Io.Writer) void {
-    g_io = in_io;
+pub fn init(out_stream: *std.Io.Writer) void {
     stream = out_stream;
-    stream_init = true;
-}
-
-/// Get the global debug output stream.
-///
-/// This should be used by all debug printing, e.g. from Block types.
-pub fn getStream() *std.Io.Writer {
-    if (!stream_init) {
-        @branchHint(.cold);
-        if (!is_wasm) {
-            // TODO: This will not work - g_io is undefined!!
-            file_stream = std.Io.File.stderr().writer(g_io, &write_buf);
-            stream = &file_stream.interface;
-            @panic("debug.io is not set!");
-        } else {
-            // In WASM, fall back to discarding writer
-            stream = &discarding_writer.writer;
-        }
-        stream_init = true;
-    }
-    return stream;
 }
 
 /// Write bytes to the debug output stream.
 pub fn write(bytes: []const u8) void {
-    getStream().write(bytes) catch {};
+    stream.write(bytes) catch {};
 }
 
 /// Print a formatted message to the debug output stream at the 'info' level.
 pub fn print(comptime fmt: []const u8, args: anytype) void {
-    getStream().print(fmt, args) catch {};
+    stream.print(fmt, args) catch {};
 }
 
 /// Print a newline to the debug output stream.
 pub fn println() void {
-    getStream().writeAll("\n") catch {};
+    stream.writeAll("\n") catch {};
 }
 
 pub fn flush() void {
-    getStream().flush() catch {};
+    stream.flush() catch {};
 }
 
 pub fn printIndent(depth: u8) void {
@@ -189,24 +162,24 @@ pub const ScopedLogger = struct {
     pub fn debug(self: ScopedLogger, comptime fmt: []const u8, args: anytype) void {
         var buf: [512]u8 = undefined;
         const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-        getStream().print("debug({s}): {s}\n", .{ self.module_name, msg }) catch {};
+        stream.print("debug({s}): {s}\n", .{ self.module_name, msg }) catch {};
     }
 
     pub fn info(self: ScopedLogger, comptime fmt: []const u8, args: anytype) void {
         var buf: [512]u8 = undefined;
         const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-        getStream().print("info({s}): {s}\n", .{ self.module_name, msg }) catch {};
+        stream.print("info({s}): {s}\n", .{ self.module_name, msg }) catch {};
     }
 
     pub fn warn(self: ScopedLogger, comptime fmt: []const u8, args: anytype) void {
         var buf: [512]u8 = undefined;
         const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-        getStream().print("warning({s}): {s}\n", .{ self.module_name, msg }) catch {};
+        stream.print("warning({s}): {s}\n", .{ self.module_name, msg }) catch {};
     }
 
     pub fn err(self: ScopedLogger, comptime fmt: []const u8, args: anytype) void {
         var buf: [512]u8 = undefined;
         const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-        getStream().print("error({s}): {s}\n", .{ self.module_name, msg }) catch {};
+        stream.print("error({s}): {s}\n", .{ self.module_name, msg }) catch {};
     }
 };

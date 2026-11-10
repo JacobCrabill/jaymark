@@ -439,7 +439,6 @@ test "Basic AST Construction" {
 
 test "Print basic AST" {
     const alloc = std.testing.allocator;
-    const io = std.testing.io;
 
     var root = try createTestAst(alloc);
     defer root.deinit();
@@ -447,7 +446,7 @@ test "Print basic AST" {
     var alloc_writer = std.Io.Writer.Allocating.init(alloc);
     defer alloc_writer.deinit();
 
-    debug.init(io, &alloc_writer.writer);
+    debug.init(&alloc_writer.writer);
 
     debug.print("Print basic AST result:\n", .{});
     defer debug.flush();
