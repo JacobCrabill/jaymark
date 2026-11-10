@@ -5,7 +5,7 @@
 > [!TIP]
 > Zig 0.17.x Required
 
-- [Features](#tools-&-features)
+- [Features](#features)
   - [Parser Features](#parser-features)
 - [Caveats](#caveats)
   - [Things I Will Not Support](#things-i-will-not-support)
@@ -32,7 +32,7 @@ application, used in a CLI, or even embedded in a browser!
 - [x] Quote blocks
 - [x] Unordered lists
 - [x] Ordered lists
-- [x] Code blocks, including syntax highlighting using TreeSitter
+- [x] Fenced code blocks (with language tags) and `{directive}` blocks
 - [x] Task lists
 - [x] Tables
 - [x] Autolinks
@@ -85,13 +85,34 @@ my_exe.root_module.addImport("jaymark", jaymark.module("jaymark"));
 Use it in your code:
 
 ```zig
+const std = @import("std");
 const jaymark = @import("jaymark");
 
-// Parse to the Markdown syntax tree (returns the root Document block)
-const ast = try jaymark.parse(gpa, "# Hello, World!\n");
-ast.debugPrint(); // defaults to stderr; see `jaymark.debug.init()`
+// (Optional) Route Jaymark's debug output (e.g. `debugPrint()`) to a stream such as stderr.
+// By default, all debug output is silently discarded. Initialize once, e.g. in `main()`.
+var stderr_buf: [4096]u8 = undefined;
+var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buf);
+jaymark.debug.init(&stderr_writer.interface);
 
-// Auto-format the document (returns a new heap-allocated string)
+// Parse to the Markdown syntax tree (returns the root Document block, owned by the caller)
+var ast = try jaymark.parse(gpa, "# Hello, World!\n");
+defer ast.deinit();
+ast.debugPrint(); // Writes to the stream given to `jaymark.debug.init()`
+
+// Auto-format the document (returns a new heap-allocated string, owned by the caller)
 const formatted = try jaymark.format(io, gpa, "#   Hello, World!  \n", 90);
-try std.testing.expectEqualStrings(" # Hello, World!\n", formatted);
+defer gpa.free(formatted);
+try std.testing.expectEqualStrings("# Hello, World!\n", formatted);
+```
+
+For verbose debug output from the parser, use the Parser struct directly instead:
+
+```zig
+var stderr_buf: [4096]u8 = undefined;
+var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buf);
+jaymark.debug.init(&stderr_writer.interface);
+
+var p = jaymark.Parser.init(gpa, .{ .verbose = true });
+defer p.deinit();
+var doc = try p.parse("# Hello, world!\n");
 ```

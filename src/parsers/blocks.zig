@@ -293,19 +293,14 @@ pub const Parser = struct {
 
     /// Tokenize the input, replacing current token list if it exists
     fn tokenize(self: *Self) !void {
-        self.tokens.clearRetainingCapacity();
+        // Free the previous token list (if any) before replacing it
+        self.tokens.deinit(self.alloc);
+        self.tokens = .empty;
 
         self.tokens = try self.lexer.tokenize(self.alloc, self.text.?);
 
-        // Initialize current and next tokens
-        self.cur_token = toks.Eof;
-        self.next_token = toks.Eof;
-
-        if (self.tokens.items.len > 0)
-            self.cur_token = self.tokens.items[0];
-
-        if (self.tokens.items.len > 1)
-            self.next_token = self.tokens.items[1];
+        // Reset the cursor and initialize current and next tokens
+        self.setCursor(0);
     }
 
     /// Set the cursor value and update current and next tokens
@@ -831,7 +826,8 @@ pub const Parser = struct {
 
             // Code block opener. We allow nesting, so track the specific chars
             if (trimmed_line[0].kind == .directive) {
-                code.opener = trimmed_line[0].text;
+                // Copy the opener so the Document does not reference the input text
+                code.opener = block.allocator().dupe(u8, trimmed_line[0].text) catch @panic("OOM");
             } else {
                 return false;
             }
@@ -913,10 +909,12 @@ pub const Parser = struct {
 
         const end: usize = utils.findFirstOf(trimmed_line, 0, &.{.newline}) orelse trimmed_line.len;
         block.leaf.raw_contents.appendSlice(block.allocator(), trimmed_line[0..end]) catch unreachable;
-        self.closeBlock(block);
 
         // Also get the raw contents as a single string
+        // (must be done before closing the block, which releases the raw tokens)
         head.text = utils.concatRawText(self.alloc, block.leaf.raw_contents) catch unreachable;
+
+        self.closeBlock(block);
 
         return true;
     }
@@ -1119,6 +1117,11 @@ pub const Parser = struct {
                         l.inlines = p.parseInlines(l.raw_contents.items) catch unreachable;
                     },
                 }
+
+                // The raw tokens reference the input text, which may not outlive the
+                // Document. All of their content has now been copied into owned fields
+                // (inlines, code text, etc.), so release them.
+                l.raw_contents.clearAndFree(l.alloc);
             },
         }
         block.close();
@@ -1448,4 +1451,78 @@ test "toOwnedDocument transfers ownership to caller" {
 
     // The spacing of the outer list should be 0 because the empty line was trailing
     try std.testing.expectEqual(@as(u8, 0), outer_list.container.content.list.spacing);
+}
+
+test "Document does not reference the input text after parsing" {
+    const alloc = std.testing.allocator;
+    const Formatter = @import("../formatter.zig").Formatter;
+
+    const input =
+        \\# Heading
+        \\
+        \\Paragraph with **bold**, `code`, [a link](foo.md), and <https://auto.link>
+        \\
+        \\> Quote
+        \\
+        \\> [!NOTE]
+        \\> An alert
+        \\
+        \\- list item
+        \\
+        \\| a | b |
+        \\| - | - |
+        \\| 1 | 2 |
+        \\
+        \\````zig
+        \\const x = 1;
+        \\````
+        \\
+        \\```{warning}
+        \\A directive
+        \\```
+        \\
+    ;
+
+    // Parse a heap copy of the input, then scrub and free it before using the Document
+    const text = try alloc.dupe(u8, input);
+    var p = Parser.init(alloc, .{ .copy_input = false });
+    try p.parse(text);
+    var doc = try p.toOwnedDocument();
+    defer doc.deinit();
+    p.deinit();
+    @memset(text, 'X');
+    alloc.free(text);
+
+    // Raw tokens (which reference the input) are released once each Leaf is closed
+    for (doc.container.children.items) |child| {
+        if (child.isLeaf()) try std.testing.expectEqual(0, child.leaf.raw_contents.items.len);
+    }
+
+    // The code fence opener is owned by the Document
+    const code: leaves.Code = for (doc.container.children.items) |child| {
+        if (child.isLeaf() and child.leaf.content == .code) break child.leaf.content.code;
+    } else return error.TestUnexpectedResult;
+    try std.testing.expectEqualStrings("````", code.opener.?);
+    try std.testing.expectEqualStrings("zig", code.tag.?);
+
+    var f = Formatter.init(std.testing.io, alloc, .{ .width = 90 });
+    defer f.deinit();
+    const output = try f.format(doc);
+    defer alloc.free(output);
+    try std.testing.expectEqualStrings(input, output);
+}
+
+test "Parser can be reused without leaking" {
+    const alloc = std.testing.allocator;
+
+    var p = Parser.init(alloc, .{});
+    defer p.deinit();
+
+    try p.parse("# First\n\nSome text\n");
+    try p.parse("# Second\n\n```c\nint x;\n```\n");
+    try p.parse("- one\n- two\n");
+
+    const doc = p.document.container;
+    try std.testing.expectEqual(1, doc.children.items.len);
+    try std.testing.expect(doc.children.items[0].container.content == .list);
 }

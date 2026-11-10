@@ -82,6 +82,7 @@ pub const Code = struct {
     text: ?[]const u8 = "",
 
     pub fn deinit(c: *Code, gpa: Allocator) void {
+        if (c.opener) |opener| gpa.free(opener);
         if (c.tag) |tag| gpa.free(tag);
         if (c.text) |text| gpa.free(text);
     }

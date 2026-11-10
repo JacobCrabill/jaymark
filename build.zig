@@ -44,6 +44,7 @@ pub fn build(b: *std.Build) !void {
     });
     const run_step = b.addRunArtifact(test_exe);
     run_step.has_side_effects = true; // Force the test to always be run on command
+    run_step.setCwd(b.path(".")); // Tests use fixtures in test/, relative to the package root
     const step = b.step("test", "Run all unit tests");
     step.dependOn(&run_step.step);
 }

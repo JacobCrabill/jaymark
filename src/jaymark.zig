@@ -126,4 +126,33 @@ test format {
     try std.testing.expectEqualStrings(expected, actual);
 }
 
+test formatFile {
+    // Regression: parseFile frees the file contents before returning the Document,
+    // so the Document must not reference the input text (e.g. code fence openers).
+    const io = std.testing.io;
+    const gpa = std.testing.allocator;
+
+    const contents =
+        \\# Heading
+        \\
+        \\````cpp
+        \\// normal code block here
+        \\````
+        \\
+        \\```{warning}
+        \\special warning directive!
+        \\```
+        \\
+    ;
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "test.md", .data = contents });
+
+    const actual = try formatFile(io, gpa, tmp.dir, "test.md", 90);
+    defer gpa.free(actual);
+
+    try std.testing.expectEqualStrings(contents, actual);
+}
+
 const std = @import("std");
