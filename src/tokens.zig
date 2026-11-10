@@ -9,7 +9,7 @@ const debug = @import("debug.zig");
 // zig fmt: off
 pub const TokenType = enum {
     eof, word, digit, indent, space, newline,
-    hash, directive, code_inline,
+    hash, fence, code_inline,
     plus, minus, star, dollar, uscore, colon,
     tilde, period, comma, equal, bang, query, at,
     percent, caret, ampersand, lt, gt,
@@ -126,8 +126,8 @@ pub const WordTokenizer = struct {
     }
 };
 
-/// Parser for a directive token
-pub const DirectiveTokenizer = struct {
+/// Parser for a fence token (3 or more '`'), which opens or closes a fenced block
+pub const FenceTokenizer = struct {
     pub fn peek(text: []const u8) ?Token {
         if (text.len == 0) return null;
 
@@ -140,7 +140,7 @@ pub const DirectiveTokenizer = struct {
         // We only match 3 or more '`' characters
         if (end > 2) {
             return Token{
-                .kind = TokenType.directive,
+                .kind = TokenType.fence,
                 .text = text[0..end],
             };
         }
@@ -193,7 +193,7 @@ pub const Tokenizers = .{
     LiteralTokenizer("___", TokenType.embold),
     LiteralTokenizer("**", TokenType.bold),
     LiteralTokenizer("__", TokenType.bold),
-    DirectiveTokenizer,
+    FenceTokenizer,
     SingularTokenizer('`', TokenType.code_inline),
     SingularTokenizer(' ', TokenType.space),
     SingularTokenizer('#', TokenType.hash),

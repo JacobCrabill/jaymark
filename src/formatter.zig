@@ -26,6 +26,11 @@ const numlist_indent_100 = Text{ .style = .{}, .text = "     " };
 const numlist_indent_1000 = Text{ .style = .{}, .text = "      " };
 const task_list_indent = Text{ .style = .{}, .text = "      " };
 
+/// The display width of the text, in codepoints (falls back to bytes for invalid UTF-8)
+fn displayWidth(text: []const u8) usize {
+    return std.unicode.utf8CountCodepoints(text) catch text.len;
+}
+
 pub const Error = Writer.Error || Allocator.Error || Block.Error || error{NoSpaceLeft};
 
 /// Auto-Format a Markdown document.
@@ -56,7 +61,6 @@ pub const Formatter = struct {
     leader_stack: ArrayList(Text) = .empty,
     needs_leaders: bool = true,
     cur_style: TextStyle = .{},
-    root: ?Block = null,
     scratch: std.Io.Writer.Allocating = undefined,
     writer: std.Io.Writer.Allocating = undefined,
     mode: RenderMode = .normal,
@@ -163,13 +167,6 @@ pub const Formatter = struct {
         self.cur_style = style;
     }
 
-    /// Reset all active style flags
-    fn endStyle(self: *Self, style: TextStyle) void {
-        if (style.underline) self.write("~");
-        if (style.italic) self.write("_");
-        if (style.bold) self.write("**");
-    }
-
     /// Configure the terminal to start printing with the given style,
     /// applying the global style overrides afterwards
     fn startStyle(self: *Self, style: TextStyle) void {
@@ -240,7 +237,7 @@ pub const Formatter = struct {
         };
         const end1 = stream.end;
         if (self.mode != .scratch and end1 > end0) {
-            const bytes = stream.buffer[end0 + 1 .. end1];
+            const bytes = stream.buffer[end0..end1];
             self.column += std.unicode.utf8CountCodepoints(bytes) catch bytes.len;
         }
     }
@@ -283,11 +280,9 @@ pub const Formatter = struct {
             }
         }
 
-        if (w.end > 0) {
-            i = w.end - 1;
-            while ((w.buffer[i] == ' ' or w.buffer[i] == '\n') and i >= 0) : (i -= 1) {
-                w.end -= 1;
-            }
+        // Trim all trailing whitespace (the buffer may be entirely whitespace)
+        while (w.end > 0 and (w.buffer[w.end - 1] == ' ' or w.buffer[w.end - 1] == '\n')) {
+            w.end -= 1;
         }
         w.writeByte('\n') catch unreachable;
 
@@ -313,13 +308,20 @@ pub const Formatter = struct {
 
         var words = std.mem.tokenizeAny(u8, text, " ");
         var need_space: usize = 0;
+        var after_open_bracket: bool = false;
         while (words.next()) |word| {
+            // We drop the space following an open bracket, e.g. "( foo)" -> "(foo)",
+            // but not if the bracket is empty, e.g. "[ ]" (which is not the same as "[]")
+            if (after_open_bracket and std.mem.indexOfScalar(u8, ")]}", word[0]) != null) {
+                need_space = 1;
+            }
             if (self.column > self.opts.indent and self.column + word.len + self.opts.indent + need_space > self.opts.width) {
                 self.renderBreak();
                 self.writeLeaders();
             } else if (need_space > 0) {
                 self.write(" ");
             }
+            after_open_bracket = false;
 
             for (word) |c| {
                 switch (c) {
@@ -329,8 +331,14 @@ pub const Formatter = struct {
                         self.writeLeaders();
                         continue;
                     },
-                    '(', '[', '{' => need_space = 0,
-                    else => need_space = 1,
+                    '(', '[', '{' => {
+                        need_space = 0;
+                        after_open_bracket = true;
+                    },
+                    else => {
+                        need_space = 1;
+                        after_open_bracket = false;
+                    },
                 }
                 self.write(&.{c});
             }
@@ -380,9 +388,6 @@ pub const Formatter = struct {
 
     /// Render a generic Block (may be a Container or a Leaf)
     pub fn renderBlock(self: *Self, block: Block) Error!void {
-        if (self.root == null) {
-            self.root = block;
-        }
         switch (block) {
             .container => |c| try self.renderContainer(c),
             .leaf => |l| try self.renderLeaf(l),
@@ -410,6 +415,7 @@ pub const Formatter = struct {
             .alert => try self.renderAlert(block),
             .linebreak => {},
             .code => try self.renderCode(block),
+            .directive => try self.renderDirective(block),
             .heading => self.renderHeading(block),
             .paragraph => self.renderParagraph(block),
         }
@@ -631,7 +637,7 @@ pub const Formatter = struct {
             for (0..nrow) |i| {
                 const cell_idx: usize = i * ncol + j;
                 const cell = cells.items[cell_idx];
-                max_cols.items[j] = @max(max_cols.items[j], cell.text.len);
+                max_cols.items[j] = @max(max_cols.items[j], displayWidth(cell.text));
             }
         }
 
@@ -650,7 +656,7 @@ pub const Formatter = struct {
                         text = text[0..end_idx];
                     }
                     self.write(text);
-                    self.writeNTimes(" ", max_cols.items[j] - text.len + 1);
+                    self.writeNTimes(" ", max_cols.items[j] - displayWidth(text) + 1);
                 } else {
                     self.writeNTimes(" ", max_cols.items[j] + 1);
                 }
@@ -765,29 +771,46 @@ pub const Formatter = struct {
     /// Render a raw block of code
     fn renderCode(self: *Self, block: Leaf) !void {
         const c = block.content.code;
-        const dir: []const u8 = c.directive orelse "";
-        const tag = c.tag orelse dir;
         const fence = c.opener orelse "```";
 
         if (self.needs_leaders) self.writeLeaders();
-        self.print("{s}{s}", .{ fence, tag });
+        self.print("{s}{s}", .{ fence, c.tag orelse "" });
         self.renderBreak();
 
         self.writeLeaders();
 
-        const has_raw_text: bool = if (c.text) |text| (text.len > 0) else false;
-        if (has_raw_text) {
-            self.wrapTextRaw(c.text.?);
-        } else {
-            self.mode = .scratch;
-            for (block.inlines.items) |item| {
-                self.renderInline(item);
-            }
-            self.mode = .normal;
-            const needs_break: bool = (self.scratch.written().len > 0);
-            self.wrapText(self.scratch.written());
-            self.scratch.clearRetainingCapacity();
-            if (needs_break) self.renderBreak();
+        // The raw text is preserved as-is (no wrapping or formatting)
+        if (c.text) |text| {
+            if (text.len > 0) self.wrapTextRaw(text);
+        }
+
+        self.write(fence);
+    }
+
+    /// Render a Directive block, e.g. "```{warning}"
+    fn renderDirective(self: *Self, block: Leaf) !void {
+        const d = block.content.directive;
+        const fence = d.opener orelse "```";
+
+        if (self.needs_leaders) self.writeLeaders();
+        self.print("{s}{{{s}}}", .{ fence, d.name orelse "" });
+        self.renderBreak();
+
+        self.writeLeaders();
+
+        // The contents are inline Markdown, so format them like a Paragraph
+        self.mode = .scratch;
+        for (block.inlines.items) |item| {
+            self.renderInline(item);
+        }
+        self.mode = .normal;
+        const has_content: bool = (self.scratch.written().len > 0);
+        self.wrapText(self.scratch.written());
+        self.scratch.clearRetainingCapacity();
+        if (has_content) {
+            // End the content's last line; the closing fence needs the leaders as well
+            self.renderBreak();
+            self.writeLeaders();
         }
 
         self.write(fence);
@@ -838,18 +861,17 @@ pub const Formatter = struct {
         self.mode = .normal;
 
         if (self.column > self.opts.indent) {
-            // The 3 is for one " " + two "`"
-            const width = code.text.len + 3 + self.startStyleWidth(code.style);
+            // Add a space if we need one (not after an open bracket or another space)
+            const buf = self.writer.written();
+            const needs_space: bool = buf.len > 0 and std.mem.indexOfScalar(u8, " ([{<", buf[buf.len - 1]) == null;
+
+            // The 2 is for the two "`"
+            const width = displayWidth(code.text) + 2 + @intFromBool(needs_space) + self.startStyleWidth(code.style);
             if (self.column + width + self.opts.indent > self.opts.width) {
                 self.renderBreak();
                 self.writeLeaders();
-            } else if (self.writer.written().len > 0) {
-                const buf = self.writer.written();
-                const last_char = buf[buf.len - 1];
-                if (std.mem.indexOfAny(u8, &.{last_char}, " ([{<") == null) {
-                    // Add a space if we need one (not after an open bracket or another space)
-                    self.write(" ");
-                }
+            } else if (needs_space) {
+                self.write(" ");
             }
         }
 
@@ -914,16 +936,16 @@ pub const Formatter = struct {
             indent += leader.text.len;
         }
         if (self.column > indent) {
-            if (self.column + self.scratch.written().len + 1 + self.opts.indent > self.opts.width) {
+            // Add a space if we need one (not after an open bracket or another space)
+            const buf = self.writer.written();
+            const needs_space: bool = buf.len > 0 and std.mem.indexOfScalar(u8, " ([{", buf[buf.len - 1]) == null;
+
+            const width = displayWidth(self.scratch.written()) + @intFromBool(needs_space);
+            if (self.column + width + self.opts.indent > self.opts.width) {
                 self.renderBreak();
                 self.writeLeaders();
-            } else {
-                const buf = self.writer.written();
-                const c = buf[buf.len - 1];
-                switch (c) {
-                    ' ', '(', '[', '{' => {},
-                    else => self.write(" "),
-                }
+            } else if (needs_space) {
+                self.write(" ");
             }
         }
 
@@ -1454,6 +1476,110 @@ test "Formatter" {
             .input = "Image: ![alt](img.png) and **![alt](img.png)** and ![**alt**](img.png)",
             .output = "Image: ![alt](img.png) and **![alt](img.png)** and ![**alt**](img.png)\n",
         },
+        // Directives: the opener is normalized, and the contents are formatted and wrapped
+        .{
+            .input =
+            \\```  {note}
+            \\Some   *formatted*
+            \\text that wraps
+            \\```
+            ,
+            .output =
+            \\```{note}
+            \\Some _formatted_
+            \\text that wraps
+            \\```
+            \\
+            ,
+            .width = 20,
+        },
+        // Directives: the fence length is preserved, including when nested
+        .{
+            .input =
+            \\> ````{warning}
+            \\> careful
+            \\> ````
+            \\
+            \\- ```{toc}
+            \\  ```
+            ,
+            .output =
+            \\> ````{warning}
+            \\> careful
+            \\> ````
+            \\
+            \\- ```{toc}
+            \\  ```
+            \\
+            ,
+        },
+        // Code blocks are not formatted, even with braces in the info string
+        .{
+            .input =
+            \\```{not a directive}
+            \\Some   *raw*   text
+            \\```
+            ,
+            .output =
+            \\```{not a directive}
+            \\Some   *raw*   text
+            \\```
+            \\
+            ,
+        },
+        // Regression: empty brackets keep their inner space ("[ ]" is not "[]"),
+        // while the space after a non-empty open bracket is still dropped
+        .{
+            .input = "[ ] x",
+            .output = "[ ] x\n",
+        },
+        .{
+            .input = "- [ ]",
+            .output = "- [ ]\n",
+        },
+        .{
+            .input = "( ) and { } and ( foo) and [ bar]",
+            .output = "( ) and { } and (foo) and [bar]\n",
+        },
+        // Regression: table columns are aligned by codepoints, not bytes
+        .{
+            .input =
+            \\| a | b |
+            \\| - | - |
+            \\| é | — |
+            \\| xx | yy |
+            ,
+            .output =
+            \\| a  | b  |
+            \\| -- | -- |
+            \\| é  | —  |
+            \\| xx | yy |
+            \\
+            ,
+        },
+        // Regression: an autolink followed by a codespan that exactly fits the width
+        // (the column after the autolink was miscounted, and the separating space was
+        // counted even when already written)
+        .{
+            .input = "# <aaaa> `b`",
+            .output = "# <aaaa> `b`\n",
+            .width = 12,
+        },
+        .{
+            .input = "# <aaaa> `b`",
+            .output = "# <aaaa>\n# `b`\n",
+            .width = 11,
+        },
+        .{
+            .input = "# <aaaa> [l](u)",
+            .output = "# <aaaa> [l](u)\n",
+            .width = 15,
+        },
+        .{
+            .input = "# <aaaa> [l](u)",
+            .output = "# <aaaa>\n# [l](u)\n",
+            .width = 14,
+        },
     };
 
     const alloc = std.testing.allocator;
@@ -1469,4 +1595,37 @@ test "Formatter" {
 
         // _ = arena.reset(.retain_capacity);
     }
+}
+
+test "Formatter.print tracks the column" {
+    var f = Formatter.init(std.testing.io, std.testing.allocator, .{});
+    defer f.deinit();
+
+    f.print("{s}", .{"abcd"});
+    try std.testing.expectEqual(4, f.column);
+
+    f.write("xy");
+    f.print("{d}", .{123});
+    try std.testing.expectEqual(9, f.column);
+
+    // Multi-byte codepoints count as a single column
+    f.print("{s}", .{"é—"});
+    try std.testing.expectEqual(11, f.column);
+}
+
+test "Formatter handles a document which renders only whitespace" {
+    const alloc = std.testing.allocator;
+
+    // A Paragraph containing only whitespace
+    var doc: Block = .initContainer(alloc, .document, 0);
+    defer doc.deinit();
+    var para: Block = .initLeaf(alloc, .paragraph, 0);
+    try para.leaf.addText(.{ .text = "  " });
+    try doc.addChild(para);
+
+    var f = Formatter.init(std.testing.io, alloc, .{});
+    defer f.deinit();
+    const output = try f.format(doc);
+    defer alloc.free(output);
+    try std.testing.expectEqualStrings("\n", output);
 }

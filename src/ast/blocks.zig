@@ -255,6 +255,7 @@ pub const Leaf = struct {
                     .alert => break :blk .{ .alert = .{} },
                     .linebreak => break :blk .{ .linebreak = {} },
                     .code => break :blk .{ .code = .{} },
+                    .directive => break :blk .{ .directive = .{} },
                     .heading => break :blk .{ .heading = .{} },
                     .paragraph => break :blk .{ .paragraph = {} },
                 }
@@ -481,20 +482,22 @@ test "sizeof(Block)" {
     if (@import("builtin").mode == .debug) {
         // Results of swapping array_list.Managed -> ArrayList:
         // Then of removing the stored `alloc` in all nested types:
-        // 224 -> 192 -> 176
-        try std.testing.expectEqual(176, @sizeOf(Block));
+        // Then of splitting Directive out of Code:
+        // 224 -> 192 -> 176 -> 160
+        try std.testing.expectEqual(160, @sizeOf(Block));
 
         // 184 -> 168 -> 152 -> 88
         try std.testing.expectEqual(88, @sizeOf(Container));
 
-        // 216 -> 184 -> 168
-        try std.testing.expectEqual(168, @sizeOf(Leaf));
+        // 216 -> 184 -> 168 -> 152
+        try std.testing.expectEqual(152, @sizeOf(Leaf));
 
-        // 88 -> 72
-        try std.testing.expectEqual(72, @sizeOf(LeafData));
+        // 88 -> 72 -> 56
+        try std.testing.expectEqual(56, @sizeOf(LeafData));
         try std.testing.expectEqual(32, @sizeOf(ArrayList(Token)));
 
-        // 80 -> 64
-        try std.testing.expectEqual(64, @sizeOf(leaves.Code));
+        // 80 -> 64 -> 48
+        try std.testing.expectEqual(48, @sizeOf(leaves.Code));
+        try std.testing.expectEqual(32, @sizeOf(leaves.Directive));
     }
 }

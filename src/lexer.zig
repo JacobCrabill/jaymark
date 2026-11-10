@@ -8,7 +8,6 @@ const utils = @import("utils.zig");
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const GPA = std.heap.GeneralPurposeAllocator;
 
 /// Common types from the Jaymark namespace
 const TokenType = toks.TokenType;
@@ -39,20 +38,6 @@ pub const Lexer = struct {
             try tokens.append(alloc, token);
         }
         return tokens;
-    }
-
-    /// Consume the remainder of the current line and return if a newline was found
-    pub fn eatLine(self: *Lexer) bool {
-        const end_opt: ?usize = std.mem.indexOfScalarPos(u8, self.data, self.cursor, '\n');
-        if (end_opt) |end| {
-            self.cursor = end + 1;
-            self.row.row += 1;
-            self.src.col = 0;
-            return true;
-        } else {
-            self.cursor = self.data.len;
-            return false;
-        }
     }
 
     /// Consume the next token in the text
@@ -150,7 +135,7 @@ test "Tokenize" {
         .{ .kind = .word, .text = "underline" },
         .{ .kind = .tilde, .text = "~" },
         .{ .kind = .newline, .text = "\n" },
-        .{ .kind = .directive, .text = "```" },
+        .{ .kind = .fence, .text = "```" },
         .{ .kind = .newline, .text = "\n" },
         .{ .kind = .star, .text = "*" },
         .{ .kind = .word, .text = "Ääbc" },

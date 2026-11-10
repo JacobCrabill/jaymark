@@ -340,10 +340,38 @@ pub fn isHeading(line: []const Token) bool {
     return false;
 }
 
+/// If the line opens a fenced Directive block, e.g. "```{warning}", return the
+/// tokens making up the directive's name (between the braces).
+/// Whitespace is allowed around the "{name}", but nothing else.
+pub fn directiveName(line: []const Token) ?[]const Token {
+    // The last line of the input may end in an EOF token
+    const line_no_eof = if (line.len > 0 and line[line.len - 1].kind == .eof) line[0 .. line.len - 1] else line;
+    const trimmed = trimTrailingWhitespace(trimLeadingWhitespace(line_no_eof));
+    if (trimmed.len == 0 or trimmed[0].kind != .fence) return null;
+
+    const info = trimLeadingWhitespace(trimmed[1..]);
+    if (info.len < 3) return null;
+    if (info[0].kind != .lcurly or info[info.len - 1].kind != .rcurly) return null;
+
+    const name = info[1 .. info.len - 1];
+    for (name) |tok| {
+        switch (tok.kind) {
+            .space, .indent, .newline, .lcurly, .rcurly => return null,
+            else => {},
+        }
+    }
+    return name;
+}
+
+/// Check if the line opens a fenced Directive block, e.g. "```{warning}"
+pub fn isDirectiveBlock(line: []const Token) bool {
+    return directiveName(line) != null;
+}
+
 pub fn isCodeBlock(line: []const Token) bool {
     for (line) |tok| {
         switch (tok.kind) {
-            .directive => return true,
+            .fence => return true,
             .space, .indent => {},
             else => return false,
         }
@@ -630,4 +658,44 @@ pub fn indexOfTokenPos(line: []const Token, start_index: usize, kind: TokenType)
         if (tok.kind == kind and !in_code) return i;
     }
     return null;
+}
+
+test directiveName {
+    const Lexer = @import("../lexer.zig").Lexer;
+    const alloc = std.testing.allocator;
+
+    const TestData = struct {
+        line: []const u8,
+        name: ?[]const u8,
+    };
+    const test_data = [_]TestData{
+        .{ .line = "```{warning}\n", .name = "warning" },
+        .{ .line = "```{warning}", .name = "warning" },
+        .{ .line = "````{note}\n", .name = "note" },
+        .{ .line = "  ``` {table-of-contents}  \n", .name = "table-of-contents" },
+        .{ .line = "```cpp\n", .name = null },
+        .{ .line = "```\n", .name = null },
+        .{ .line = "```{}\n", .name = null },
+        .{ .line = "```{warning\n", .name = null },
+        .{ .line = "```{warning} extra\n", .name = null },
+        .{ .line = "```{two words}\n", .name = null },
+        .{ .line = "```{a}{b}\n", .name = null },
+        .{ .line = "{warning}\n", .name = null },
+    };
+
+    for (test_data) |data| {
+        var lex = Lexer{};
+        var tokens = try lex.tokenize(alloc, data.line);
+        defer tokens.deinit(alloc);
+
+        const name_toks = directiveName(tokens.items);
+        try std.testing.expectEqual(data.name != null, isDirectiveBlock(tokens.items));
+        if (data.name) |expected| {
+            const name = try toks.concatWords(alloc, name_toks.?);
+            defer alloc.free(name);
+            try std.testing.expectEqualStrings(expected, name);
+        } else {
+            try std.testing.expect(name_toks == null);
+        }
+    }
 }

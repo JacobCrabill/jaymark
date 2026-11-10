@@ -170,22 +170,6 @@ fn trimContinuationMarkersTable(line: []const Token) []const Token {
     @panic("Can't be here!");
 }
 
-fn parseOneInline(alloc: Allocator, tokens: []const Token) ?inls.Inline {
-    _ = alloc; // autofix
-    if (tokens.len < 1) return null;
-
-    for (tokens, 0..) |tok, i| {
-        _ = i;
-        switch (tok.kind) {
-            .word => {
-                // todo: parse (concatenate) all following words until a change
-                // For now, just take the lazy approach
-                return inls.Inline.initWithContent(.{ .text = inls.Text{ .text = tok.text } });
-            },
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // Parser Struct
 ///////////////////////////////////////////////////////////////////////////////
@@ -371,6 +355,7 @@ pub const Parser = struct {
                     .alert => return self.handleLineAlert(block, line),
                     .linebreak => return self.handleLineBreak(block, line),
                     .code => return self.handleLineCode(block, line),
+                    .directive => return self.handleLineDirective(block, line),
                     .heading => return self.handleLineHeading(block, line),
                     .paragraph => return self.handleLineParagraph(block, line),
                 }
@@ -581,8 +566,8 @@ pub const Parser = struct {
             if (nchildren == 0) break :blk false;
             const child: *Block = &cblock.children.items[nchildren - 1];
             if (!child.isOpen()) break :blk false;
-            if (!(child.isLeaf() and child.leaf.content == .code)) break :blk false;
-            self.logger.log("ListItem contains open code block\n", .{});
+            if (!(child.isLeaf() and (child.leaf.content == .code or child.leaf.content == .directive))) break :blk false;
+            self.logger.log("ListItem contains open fenced block\n", .{});
             break :blk true;
         };
 
@@ -820,34 +805,56 @@ pub const Parser = struct {
             return false;
 
         if (code.opener == null) {
-            // Brand new code block; parse the directive line
+            // Brand new code block; parse the opening fence line
             const trimmed_line = utils.trimLeadingWhitespace(line);
             if (trimmed_line.len < 1) return false;
 
             // Code block opener. We allow nesting, so track the specific chars
-            if (trimmed_line[0].kind == .directive) {
-                // Copy the opener so the Document does not reference the input text
-                code.opener = block.allocator().dupe(u8, trimmed_line[0].text) catch @panic("OOM");
-            } else {
-                return false;
-            }
+            if (trimmed_line[0].kind != .fence) return false;
 
-            // Parse the directive tag (language, or special command like "warning")
+            // Copy the opener so the Document does not reference the input text
+            code.opener = block.allocator().dupe(u8, trimmed_line[0].text) catch @panic("OOM");
+
+            // Parse the info string (e.g. the language)
             const end: usize = utils.findFirstOf(trimmed_line, 1, &.{.newline}) orelse trimmed_line.len;
             if (end > 1) {
-                code.tag = toks.concatWords(block.allocator(), trimmed_line[1..end]) catch unreachable;
-            }
-
-            if (code.tag) |tag| {
-                // Check for a special directive block like "{warning}"
-                if (tag[0] == '{' and tag[tag.len - 1] == '}') {
-                    code.directive = tag[1 .. tag.len - 1];
-                }
+                code.tag = toks.concatWords(block.allocator(), trimmed_line[1..end]) catch @panic("OOM");
             }
 
             return true;
         }
 
+        return self.handleLineFencedBody(block, line, code.opener.?);
+    }
+
+    pub fn handleLineDirective(self: *Self, block: *Block, line: []const Token) bool {
+        self.logger.depth += 1;
+        defer self.logger.depth -= 1;
+        var directive: *leaves.Directive = &block.leaf.content.directive;
+
+        if (!block.isOpen())
+            return false;
+
+        if (directive.opener == null) {
+            // Brand new directive block; parse the opening fence line, e.g. "```{warning}"
+            const trimmed_line = utils.trimLeadingWhitespace(line);
+            const name = utils.directiveName(trimmed_line) orelse return false;
+
+            // Copy the opener and name so the Document does not reference the input text
+            const gpa = block.allocator();
+            directive.opener = gpa.dupe(u8, trimmed_line[0].text) catch @panic("OOM");
+            directive.name = toks.concatWords(gpa, name) catch @panic("OOM");
+            self.logger.log("  Directive: {s}\n", .{directive.name.?});
+
+            return true;
+        }
+
+        return self.handleLineFencedBody(block, line, directive.opener.?);
+    }
+
+    /// Handle a line in the body of a fenced (Code or Directive) block,
+    /// closing the block if the line contains the closing fence.
+    fn handleLineFencedBody(self: *Self, block: *Block, line: []const Token, opener: []const u8) bool {
         // Append all of the current line's tokens to the block's raw_contents
         // Check if we have the closing code block token on this line
         //
@@ -864,21 +871,21 @@ pub const Parser = struct {
 
         var have_closer: bool = false;
         for (self.cur_line, 0..) |tok, i| {
-            if (tok.kind == .directive and std.mem.eql(u8, tok.text, code.opener.?)) {
+            if (tok.kind == .fence and std.mem.eql(u8, tok.text, opener)) {
                 have_closer = true;
-                self.logger.log("Closing current code block\n", .{});
+                self.logger.log("Closing current fenced block\n", .{});
                 break;
             }
 
             // Skip any container markers trimmed by our parent blocks
             if (i < prefix_len and !utils.isWhitespace(tok.kind)) {
-                self.logger.log("Skipping container token '{s}' in code block\n", .{tok.text});
+                self.logger.log("Skipping container token '{s}' in fenced block\n", .{tok.text});
                 continue;
             }
 
             // Don't append any leading whitespace prior to the start column of the block
             if (utils.isWhitespace(tok.kind) and tok.src.col < block.start_col()) {
-                self.logger.log("Skipping token '{s}' in code block\n", .{tok.text});
+                self.logger.log("Skipping token '{s}' in fenced block\n", .{tok.text});
                 continue;
             }
             block.leaf.raw_contents.append(block.allocator(), tok) catch unreachable;
@@ -1035,12 +1042,17 @@ pub const Parser = struct {
                 if (!self.handleLineHeading(&b, line))
                     try errorReturn(@src(), "Cannot parse line as heading: {any}", .{line});
             },
-            .directive => {
-                // TODO: if line == .directive, .lbrack, .word, .rbrack
-                //   then it's a Directive, not a Code
-                b = Block.initLeaf(self.alloc, .code, col);
-                if (!self.handleLineCode(&b, line))
-                    try errorReturn(@src(), "Cannot parse line as code: {any}", .{line});
+            .fence => {
+                // A fenced block: either a Directive (e.g. "```{warning}") or Code
+                if (utils.isDirectiveBlock(line)) {
+                    b = Block.initLeaf(self.alloc, .directive, col);
+                    if (!self.handleLineDirective(&b, line))
+                        try errorReturn(@src(), "Cannot parse line as directive: {any}", .{line});
+                } else {
+                    b = Block.initLeaf(self.alloc, .code, col);
+                    if (!self.handleLineCode(&b, line))
+                        try errorReturn(@src(), "Cannot parse line as code: {any}", .{line});
+                }
             },
             .newline => {
                 b = Block.initLeaf(self.alloc, .linebreak, col);
@@ -1100,16 +1112,7 @@ pub const Parser = struct {
             },
             .leaf => |*l| {
                 switch (l.content) {
-                    .code => |c| {
-                        if (c.directive != null) {
-                            var p = InlineParser.init(self.alloc, self.opts);
-                            defer p.deinit();
-                            self.logger.log("Parsing inlines for Leaf of type {s}\n", .{@tagName(block.leaf.content)});
-                            l.inlines = p.parseInlines(l.raw_contents.items) catch unreachable;
-                        } else {
-                            self.closeBlockCode(block);
-                        }
-                    },
+                    .code => self.closeBlockCode(block),
                     else => {
                         var p = InlineParser.init(self.alloc, self.opts);
                         defer p.deinit();
@@ -1505,6 +1508,13 @@ test "Document does not reference the input text after parsing" {
     try std.testing.expectEqualStrings("````", code.opener.?);
     try std.testing.expectEqualStrings("zig", code.tag.?);
 
+    // As is the directive's opener and name
+    const directive: leaves.Directive = for (doc.container.children.items) |child| {
+        if (child.isLeaf() and child.leaf.content == .directive) break child.leaf.content.directive;
+    } else return error.TestUnexpectedResult;
+    try std.testing.expectEqualStrings("```", directive.opener.?);
+    try std.testing.expectEqualStrings("warning", directive.name.?);
+
     var f = Formatter.init(std.testing.io, alloc, .{ .width = 90 });
     defer f.deinit();
     const output = try f.format(doc);
@@ -1525,4 +1535,86 @@ test "Parser can be reused without leaking" {
     const doc = p.document.container;
     try std.testing.expectEqual(1, doc.children.items.len);
     try std.testing.expect(doc.children.items[0].container.content == .list);
+}
+
+test "Parser separates code blocks from directives" {
+    const alloc = std.testing.allocator;
+    const input =
+        \\```cpp
+        \\int x = **1**;
+        \\```
+        \\
+        \\```{warning}
+        \\Some **bold** text
+        \\```
+        \\
+        \\```{not a directive}
+        \\raw
+        \\```
+        \\
+        \\- ````{note}
+        \\  In a list
+        \\  ````
+        \\
+        \\> ```{toc}
+        \\> ```
+    ;
+
+    var p = Parser.init(alloc, .{});
+    defer p.deinit();
+    try p.parse(input);
+    const doc = &p.document;
+
+    var leaf_blocks: std.ArrayList(*const blocks.Leaf) = .empty;
+    defer leaf_blocks.deinit(alloc);
+    try collectFencedLeaves(alloc, doc, &leaf_blocks);
+    try std.testing.expectEqual(5, leaf_blocks.items.len);
+
+    // Code: raw text, no inlines
+    const code = leaf_blocks.items[0];
+    try std.testing.expect(code.content == .code);
+    try std.testing.expectEqualStrings("cpp", code.content.code.tag.?);
+    try std.testing.expectEqualStrings("int x = **1**;\n", code.content.code.text.?);
+    try std.testing.expectEqual(0, code.inlines.items.len);
+
+    // Directive: name, and inline (formatted) content
+    const warning = leaf_blocks.items[1];
+    try std.testing.expect(warning.content == .directive);
+    try std.testing.expectEqualStrings("warning", warning.content.directive.name.?);
+    try std.testing.expectEqualStrings("```", warning.content.directive.opener.?);
+    var have_bold: bool = false;
+    for (warning.inlines.items) |item| {
+        if (item.content == .text and item.content.text.style.bold) {
+            try std.testing.expectEqualStrings("bold", item.content.text.text);
+            have_bold = true;
+        }
+    }
+    try std.testing.expect(have_bold);
+
+    // An info string with braces which isn't a valid "{name}" is a Code block
+    const not_directive = leaf_blocks.items[2];
+    try std.testing.expect(not_directive.content == .code);
+    try std.testing.expectEqualStrings("{not a directive}", not_directive.content.code.tag.?);
+
+    // Directives nested within containers
+    const note = leaf_blocks.items[3];
+    try std.testing.expect(note.content == .directive);
+    try std.testing.expectEqualStrings("note", note.content.directive.name.?);
+    try std.testing.expectEqualStrings("````", note.content.directive.opener.?);
+
+    const toc = leaf_blocks.items[4];
+    try std.testing.expect(toc.content == .directive);
+    try std.testing.expectEqualStrings("toc", toc.content.directive.name.?);
+    try std.testing.expectEqual(0, toc.inlines.items.len);
+}
+
+/// Test helper: collect all Code and Directive leaves in document order
+fn collectFencedLeaves(alloc: Allocator, block: *const Block, out: *std.ArrayList(*const blocks.Leaf)) !void {
+    switch (block.*) {
+        .container => |*c| for (c.children.items) |*child| try collectFencedLeaves(alloc, child, out),
+        .leaf => |*l| switch (l.content) {
+            .code, .directive => try out.append(alloc, l),
+            else => {},
+        },
+    }
 }

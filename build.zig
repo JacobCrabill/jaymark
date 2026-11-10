@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) !void {
         .linkage = .static,
     });
 
-    const lib_step = b.step("lib", "Build jaymark as a shared library (and also build HTML docs)");
+    const lib_step = b.step("lib", "Build jaymark as a static library (and also build HTML docs)");
     lib_step.dependOn(&lib.step);
 
     // Generate and install documentation using the library target

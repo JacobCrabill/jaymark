@@ -411,7 +411,7 @@ fn extractLinksRecurse(io: std.Io, alloc: Allocator, current_dir: std.Io.Dir, li
         },
         .leaf => |l| {
             switch (l.content) {
-                .paragraph, .heading, .alert => {
+                .paragraph, .heading, .alert, .directive => {
                     for (l.inlines.items) |inl| {
                         switch (inl.content) {
                             .link => |link| {
@@ -485,6 +485,11 @@ test extractLinksFromDocument {
         \\> [!INFO]
         \\> Links are allowed in [github alert boxes](docs.github.com)
         \\
+        \\```{note}
+        \\Links are allowed in [directive blocks](docs.example.com),
+        \\and are also [de-duplicated](www.bar.com)
+        \\```
+        \\
         \\# Links are also allowed in [headings](foo)
     ;
 
@@ -496,6 +501,7 @@ test extractLinksFromDocument {
         .{ .kind = .remote, .text = "A file that doesn't exist locally", .uri = "./foo/bar/baz" },
         .{ .kind = .remote, .text = "not duplicate, bc non-existent", .uri = "foo/bar/baz" },
         .{ .kind = .remote, .text = "github alert boxes", .uri = "docs.github.com" },
+        .{ .kind = .remote, .text = "directive blocks", .uri = "docs.example.com" },
         .{ .kind = .remote, .text = "headings", .uri = "foo" },
     };
 

@@ -20,7 +20,7 @@ pub const LeafType = enum(u8) {
     alert,
     linebreak,
     code,
-    // directive,
+    directive,
     heading,
     paragraph,
     // reference,
@@ -31,7 +31,7 @@ pub const LeafData = union(LeafType) {
     alert: Alert,
     linebreak: void,
     code: Code,
-    // directive: Directive,
+    directive: Directive,
     heading: Heading,
     paragraph: void,
     // reference: Reference,
@@ -40,7 +40,7 @@ pub const LeafData = union(LeafType) {
         switch (self.*) {
             .heading => |*h| h.deinit(gpa),
             .code => |*c| c.deinit(gpa),
-            // .directive => |*d| d.deinit(gpa),
+            .directive => |*d| d.deinit(gpa),
             .alert => |*a| a.deinit(gpa),
             inline else => {},
         }
@@ -50,7 +50,7 @@ pub const LeafData = union(LeafType) {
         switch (self) {
             .heading => |h| h.print(depth),
             .code => |c| c.print(depth),
-            // .directive => |d| d.print(depth),
+            .directive => |d| d.print(depth),
             .alert => |a| a.print(depth),
             inline else => {},
         }
@@ -72,13 +72,17 @@ pub const Heading = struct {
     }
 };
 
-/// Raw code or other preformatted content
-/// TODO: Split into "Code" and "Directive" to have explicit "Directive" types
+/// Fenced block of raw code or other preformatted content, e.g.:
+///
+///     ```cpp
+///     int x = 1;
+///     ```
 pub const Code = struct {
-    // The opening tag, e.g. "```", that has to be matched to end the block
+    /// The opening fence, e.g. "```", that has to be matched to end the block
     opener: ?[]const u8 = null,
+    /// The info string following the opening fence, e.g. the language ("cpp")
     tag: ?[]const u8 = null,
-    directive: ?[]const u8 = null,
+    /// The raw (unparsed) contents of the block
     text: ?[]const u8 = "",
 
     pub fn deinit(c: *Code, gpa: Allocator) void {
@@ -97,23 +101,28 @@ pub const Code = struct {
     }
 };
 
-/// Directive or Admonition box
-/// This is still TODO. Similar to the Alert, but using the fenced-block syntax.
+/// Directive or Admonition box, using the fenced-block syntax with the
+/// directive name in braces, e.g.:
+///
+///     ```{warning}
+///     Some *formatted* text
+///     ```
+///
+/// Unlike a Code block, the contents are parsed as inline Markdown (in the Leaf's inlines).
 pub const Directive = struct {
-    // The opening tag, e.g. "```", that has to be matched to end the block
+    /// The opening fence, e.g. "```", that has to be matched to end the block
     opener: ?[]const u8 = null,
-    directive: ?[]const u8 = null,
+    /// The name of the directive, without the braces, e.g. "warning"
+    name: ?[]const u8 = null,
 
-    pub fn deinit(c: *Directive, gpa: Allocator) void {
-        if (c.directive) |directive| gpa.free(directive);
-        if (c.text) |text| gpa.free(text);
+    pub fn deinit(d: *Directive, gpa: Allocator) void {
+        if (d.opener) |opener| gpa.free(opener);
+        if (d.name) |name| gpa.free(name);
     }
 
-    pub fn print(c: Directive, depth: u8) void {
+    pub fn print(d: Directive, depth: u8) void {
         debug.printIndent(depth);
-        var directive: []const u8 = "";
-        if (c.directive) |d| directive = d;
-        debug.print("directive: '{s}'\n", .{directive});
+        debug.print("directive: '{s}'\n", .{d.name orelse ""});
     }
 };
 
@@ -132,3 +141,12 @@ pub const Alert = struct {
         debug.print("alert: '{s}'\n", .{alert});
     }
 };
+
+test "Directive.deinit" {
+    const gpa = std.testing.allocator;
+    var d = Directive{
+        .opener = try gpa.dupe(u8, "```"),
+        .name = try gpa.dupe(u8, "warning"),
+    };
+    d.deinit(gpa);
+}
